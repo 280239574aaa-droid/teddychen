@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魔物讨伐 - 完整功能版</title>
+    <style>
+        :root {
+            --bg-color: #2c3e50;
+            --text-color: #ecf0f1;
+            --highlight-color: #f1c40f;
+            --poster-color: #e74c3c;
+            --monster-size: 160px;
+            --modal-bg: rgba(20, 20, 20, 0.95);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', sans-serif;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            height: 100vh; overflow: hidden;
+            user-select: none;
+        }
+
+        /* --- 顶部 UI --- */
+        .top-layer {
+            position: absolute; top: 0; left: 0; width: 100%;
+            padding: 20px; box-sizing: border-box;
+            display: flex; justify-content: space-between;
+            align-items: flex-start; z-index: 10; pointer-events: none;
+        }
+
+        .activity-title {
+            pointer-events: auto;
+            font-size: 1.4rem; font-weight: 800;
+            color: var(--highlight-color);
+            border: 2px solid var(--highlight-color);
+            padding: 8px 20px; border-radius: 30px;
+            background: rgba(0,0,0,0.3); backdrop-filter: blur(4px);
+        }
+
+        .top-menu { pointer-events: auto; display: flex; gap: 10px; }
+
+        .menu-btn {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white; padding: 8px 12px;
+            border-radius: 12px; font-size: 0.8rem;
+            cursor: pointer; display: flex; flex-direction: column;
+            align-items: center; min-width: 60px;
+            backdrop-filter: blur(4px); transition: 0.2s;
+        }
+        .menu-btn:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
+        .menu-icon { font-size: 1.2rem; margin-bottom: 2px; }
+
+        /* --- 中间魔物场景 --- */
+        .monster-scene {
+            position: relative; flex: 1; width: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .monster-wrapper { position: relative; }
+
+        .monster {
+            font-size: var(--monster-size); cursor: pointer;
+            filter: drop-shadow(0 10px 15px rgba(0,0,0,0.5));
+            transition: transform 0.2s; position: relative; z-index: 2;
+        }
+
+        /* 动画关键帧 */
+        @keyframes hardHit {
+            0% { transform: scale(1); filter: brightness(1); }
+            30% { transform: scale(1.3) rotate(5deg); filter: brightness(1) sepia(1) hue-rotate(-50deg) saturate(5); }
+            50% { transform: translate(-5px, 0) skewX(10deg); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+        .monster.hit { animation: hardHit 0.4s ease-out; }
+
+        @keyframes dieAndRespawn {
+            0% { transform: scale(1); opacity: 1; }
+            40% { transform: scale(0) rotate(180deg); opacity: 0; }
+            60% { transform: scale(0) translateY(50px); opacity: 0; }
+            80% { transform: scale(1.2) translateY(0); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+        .monster.respawn { animation: dieAndRespawn 0.8s ease-in-out; }
+
+        /* 波纹 & 气泡 */
+        .shockwave {
+            position: absolute; top: 50%; left: 50%;
+            width: 100px; height: 100px;
+            background: rgba(255,255,255,0.6); border-radius: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            pointer-events: none; z-index: 1;
+        }
+        .shockwave.active { animation: wave 0.4s ease-out; }
+        @keyframes wave { to { transform: translate(-50%, -50%) scale(4); opacity: 0; } }
+
+        .speech-bubble {
+            position: absolute; top: -20px; left: 50%;
+            transform: translateX(-50%) scale(0);
+            background-color: #fff; color: #333;
+            padding: 8px 15px; border-radius: 15px;
+            font-weight: bold; font-size: 1rem;
+            white-space: nowrap; opacity: 0; pointer-events: none;
+            transition: all 0.2s; z-index: 5;
+        }
+        .speech-bubble.show { opacity: 1; transform: translateX(-50%) scale(1); top: -80px; }
+
+        /* --- 底部控制区 --- */
+        .bottom-panel {
+            width: 90%; max-width: 700px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 20px; padding: 20px;
+            margin-bottom: 30px;
+            display: flex; align-items: center; gap: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+
+        .progress-wrapper {
+            flex: 1; height: 30px;
+            background-color: #34495e;
+            border-radius: 15px; overflow: hidden;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .progress-bar {
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, #e74c3c, #c0392b);
+            transition: width 0.2s ease-out;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: bold; text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+
+        .action-group { display: flex; flex-direction: column; gap: 10px; min-width: 170px; }
+
+        .resources-row {
+            display: flex; justify-content: space-between;
+            font-size: 0.8rem; font-weight: bold;
+            color: #bdc3c7; background: rgba(0,0,0,0.2);
+            padding: 6px 10px; border-radius: 8px;
+        }
+        .res-item span { margin-left: 4px; font-size: 0.95rem; }
+        .res-token span { color: var(--highlight-color); }
+        .res-poster span { color: var(--poster-color); }
+
+        .btn {
+            width: 100%; padding: 10px 0;
+            font-size: 0.95rem; border: none; border-radius: 8px;
+            cursor: pointer; font-weight: bold;
+            transition: all 0.1s; position: relative;
+            display: flex; align-items: center; justify-content: center; gap: 5px;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn:disabled { filter: grayscale(1); opacity: 0.6; cursor: not-allowed; }
+
+        .btn-attack { background: linear-gradient(to bottom, #e67e22, #d35400); color: white; box-shadow: 0 3px 0 #a04000; }
+        .btn-attack:hover:not(:disabled) { filter: brightness(1.1); }
+
+        .btn-challenge { background: #7f8c8d; color: #ecf0f1; box-shadow: 0 3px 0 #586364; }
+        .btn-challenge.active { background: linear-gradient(to bottom, #e74c3c, #c0392b); color: white; box-shadow: 0 3px 0 #922b21; }
+
+        /* --- 弹窗样式 (Modals) --- */
+        .modal-overlay {
+            display: none; /* 默认隐藏 */
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            justify-content: center; align-items: center;
+            backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            background: var(--modal-bg);
+            width: 85%; max-width: 400px;
+            border-radius: 20px;
+            border: 1px solid #555;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            padding: 25px;
+            text-align: center;
+            color: white;
+            transform: scale(0.8); opacity: 0;
+            transition: all 0.3s;
+        }
+        .modal-overlay.open .modal-box { transform: scale(1); opacity: 1; }
+        
+        .modal-title { font-size: 1.5rem; color: var(--highlight-color); margin-bottom: 20px; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        .close-btn {
+            margin-top: 20px; padding: 10px 30px;
+            background: #34495e; border: 1px solid #7f8c8d;
+            color: white; border-radius: 20px; cursor: pointer;
+        }
+        .close-btn:hover { background: #2c3e50; }
+
+        /* 奖励列表 */
+        .reward-item {
+            background: rgba(255,255,255,0.05);
+            margin-bottom: 15px; padding: 15px; border-radius: 10px;
+            text-align: left;
+        }
+        .reward-label { font-size: 0.9rem; color: #bdc3c7; margin-bottom: 5px; }
+        .reward-content { font-size: 1.1rem; color: #f1c40f; font-weight: bold; }
+
+        /* 排行榜列表 */
+        .rank-list { width: 100%; border-collapse: collapse; }
+        .rank-list th { text-align: left; color: #7f8c8d; font-size: 0.8rem; padding-bottom: 10px; }
+        .rank-list td { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .rank-list tr:last-child td { border-bottom: none; }
+        .rank-num { width: 40px; font-weight: bold; color: #bdc3c7; }
+        .rank-num.top1 { color: #f1c40f; } 
+        .rank-num.top2 { color: #bdc3c7; } 
+        .rank-num.top3 { color: #e67e22; }
+        .rank-name { text-align: left; }
+        .rank-score { text-align: right; color: #e74c3c; font-weight: bold; }
+        .rank-myself { background: rgba(231, 76, 60, 0.1); } /* 高亮自己 */
+
+        /* 浮动文字 */
+        .float-text {
+            position: absolute; color: var(--poster-color);
+            font-weight: bold; font-size: 1.5rem;
+            pointer-events: none; z-index: 20;
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 0 0 5px white;
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-50px) scale(1.2); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 顶部 -->
+    <div class="top-layer">
+        <div class="activity-title">魔物讨伐</div>
+        <div class="top-menu">
+            <button class="menu-btn" onclick="openRankModal()">
+                <span class="menu-icon">🏆</span>排行榜
+            </button>
+            <button class="menu-btn" onclick="openRewardModal()">
+                <span class="menu-icon">🎁</span>奖励预览
+            </button>
+        </div>
+    </div>
+
+    <!-- 中间 -->
+    <div class="monster-scene">
+        <div class="monster-wrapper">
+            <div class="shockwave" id="shockwave"></div>
+            <div class="speech-bubble" id="dialog">...</div>
+            <div class="monster" id="monster">👹</div>
+        </div>
+    </div>
+
+    <!-- 底部 -->
+    <div class="bottom-panel">
+        <!-- 血条 -->
+        <div class="progress-wrapper">
+            <div class="progress-bar" id="hp-bar" style="width: 100%;">100%</div>
+        </div>
+
+        <!-- 资源与操作 -->
+        <div class="action-group">
+            <div class="resources-row">
+                <div class="res-item res-token">讨伐令:<span id="token-count">20</span></div>
+                <div class="res-item res-poster">通缉令:<span id="poster-count">0</span></div>
+            </div>
+
+            <button class="btn btn-attack" id="attack-btn" onclick="attackMonster()">
+                ⚔️ 攻击魔物
+            </button>
+            
+            <button class="btn btn-challenge" id="challenge-btn" onclick="usePoster()" disabled>
+                📜 前往讨伐BOSS
+            </button>
+        </div>
+    </div>
+
+    <!-- 弹窗：奖励预览 -->
+    <div class="modal-overlay" id="reward-modal">
+        <div class="modal-box">
+            <div class="modal-title">🎁 奖励一览</div>
+            
+            <div class="reward-item">
+                <div class="reward-label">发起 BOSS 挑战并胜利</div>
+                <div class="reward-content">获得：屠龙宝刀 x1</div>
+            </div>
+            
+            <div class="reward-item">
+                <div class="reward-label">参与 BOSS 挑战并胜利</div>
+                <div class="reward-content">获得：勇者金币 x1000</div>
+            </div>
+
+            <button class="close-btn" onclick="closeModals()">关闭</button>
+        </div>
+    </div>
+
+    <!-- 弹窗：排行榜 -->
+    <div class="modal-overlay" id="rank-modal">
+        <div class="modal-box">
+            <div class="modal-title">🏆 伤害排行榜</div>
+            <table class="rank-list" id="rank-table-body">
+                <!-- JS 动态生成 -->
+            </table>
+            <div style="margin-top: 15px; font-size: 0.8rem; color: #7f8c8d;">
+                *根据打掉魔物的总血量排名
+            </div>
+            <button class="close-btn" onclick="closeModals()">关闭</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 游戏数据 ---
+        const CONFIG = {
+            damagePerHit: 20,
+            hpMax: 100
+        };
+
+        let state = {
+            hp: 100,
+            tokens: 20,
+            posters: 0,
+            totalDamage: 0, // 记录玩家造成的总伤害
+            isRespawning: false
+        };
+
+        const dialogTexts = ["好痛！", "还没完呢！", "可恶啊！", "别太嚣张！", "我会回来的！"];
+
+        // --- DOM 元素 ---
+        const el = {
+            monster: document.getElementById('monster'),
+            shockwave: document.getElementById('shockwave'),
+            dialog: document.getElementById('dialog'),
+            hpBar: document.getElementById('hp-bar'),
+            tokenCount: document.getElementById('token-count'),
+            posterCount: document.getElementById('poster-count'),
+            attackBtn: document.getElementById('attack-btn'),
+            challengeBtn: document.getElementById('challenge-btn'),
+            monsterWrapper: document.querySelector('.monster-wrapper'),
+            rewardModal: document.getElementById('reward-modal'),
+            rankModal: document.getElementById('rank-modal'),
+            rankTable: document.getElementById('rank-table-body')
+        };
+
+        // --- 初始化 ---
+        updateUI();
+
+        // --- 核心逻辑：攻击 ---
+        function attackMonster() {
+            if (state.isRespawning) return;
+            if (state.tokens <= 0) {
+                alert("讨伐令不足！");
+                return;
+            }
+
+            // 1. 数据变动
+            state.tokens--;
+            state.hp -= CONFIG.damagePerHit;
+            state.totalDamage += CONFIG.damagePerHit; // 累积总伤害
+
+            if (state.hp < 0) state.hp = 0;
+
+            // 2. 特效与UI
+            triggerHitEffect();
+            updateUI();
+
+            // 3. 判定
+            if (state.hp <= 0) {
+                handleKill();
+            } else {
+                const text = dialogTexts[Math.floor(Math.random() * dialogTexts.length)];
+                showDialog(text);
+            }
+        }
+
+        function handleKill() {
+            state.isRespawning = true;
+            state.posters++;
+            showFloatingText("+1 通缉令");
+            showDialog("我不甘心...！");
+
+            // 复活流程
+            setTimeout(() => {
+                el.monster.classList.remove('hit');
+                el.monster.classList.add('respawn');
+                
+                setTimeout(() => {
+                    state.hp = CONFIG.hpMax;
+                    state.isRespawning = false;
+                    updateUI();
+                    
+                    setTimeout(() => {
+                        el.monster.classList.remove('respawn');
+                    }, 400);
+                }, 400);
+            }, 300);
+        }
+
+        function usePoster() {
+            if (state.posters <= 0) return;
+            const confirmAction = confirm(`确认消耗1张通缉令？\n\n发起挑战可获得：屠龙宝刀\n参与挑战可获得：勇者金币`);
+            if (confirmAction) {
+                state.posters--;
+                updateUI();
+                alert("正在前往BOSS战场...");
+            }
+        }
+
+        // --- 弹窗逻辑 ---
+        function openRewardModal() {
+            closeModals();
+            el.rewardModal.style.display = 'flex';
+            // 强制重绘触发 transition
+            setTimeout(() => el.rewardModal.classList.add('open'), 10);
+        }
+
+        function openRankModal() {
+            closeModals();
+            generateRanking(); // 生成排行榜数据
+            el.rankModal.style.display = 'flex';
+            setTimeout(() => el.rankModal.classList.add('open'), 10);
+        }
+
+        function closeModals() {
+            document.querySelectorAll('.modal-overlay').forEach(modal => {
+                modal.classList.remove('open');
+                setTimeout(() => {
+                    if(!modal.classList.contains('open')) modal.style.display = 'none';
+                }, 300);
+            });
+        }
+
+        // --- 排行榜数据生成 ---
+        function generateRanking() {
+            // 1. 模拟一些假数据
+            let rankingData = [
+                { name: "龙骑士_Alex", damage: 8500 },
+                { name: "路人甲", damage: 4200 },
+                { name: "打怪专家", damage: 3600 },
+                { name: "摸鱼达人", damage: 1200 },
+                { name: "新手玩家", damage: 400 }
+            ];
+
+            // 2. 把自己加进去
+            rankingData.push({ name: "我 (YOU)", damage: state.totalDamage, isMe: true });
+
+            // 3. 排序 (伤害从高到低)
+            rankingData.sort((a, b) => b.damage - a.damage);
+
+            // 4. 生成 HTML
+            let html = `<tr><th>排名</th><th>玩家</th><th>总伤害</th></tr>`;
+            rankingData.forEach((item, index) => {
+                const rank = index + 1;
+                const rowClass = item.isMe ? 'rank-myself' : '';
+                const rankClass = rank <= 3 ? `top${rank}` : '';
+                
+                html += `
+                    <tr class="${rowClass}">
+                        <td class="rank-num ${rankClass}">${rank}</td>
+                        <td class="rank-name">${item.name}</td>
+                        <td class="rank-score">${item.damage}</td>
+                    </tr>
+                `;
+            });
+            el.rankTable.innerHTML = html;
+        }
+
+        // --- 视觉特效 ---
+        function triggerHitEffect() {
+            el.monster.classList.remove('hit');
+            el.shockwave.classList.remove('active');
+            void el.monster.offsetWidth;
+            void el.shockwave.offsetWidth;
+            el.monster.classList.add('hit');
+            el.shockwave.classList.add('active');
+        }
+
+        function showFloatingText(text) {
+            const floatEl = document.createElement('div');
+            floatEl.className = 'float-text';
+            floatEl.innerText = text;
+            const randomX = (Math.random() - 0.5) * 50;
+            floatEl.style.transform = `translateX(${randomX}px)`;
+            el.monsterWrapper.appendChild(floatEl);
+            setTimeout(() => floatEl.remove(), 1000);
+        }
+
+        let dialogTimer;
+        function showDialog(text) {
+            el.dialog.innerText = text;
+            el.dialog.classList.add('show');
+            clearTimeout(dialogTimer);
+            dialogTimer = setTimeout(() => {
+                el.dialog.classList.remove('show');
+            }, 800);
+        }
+
+        // --- UI 更新 ---
+        function updateUI() {
+            el.tokenCount.innerText = state.tokens;
+            el.posterCount.innerText = state.posters;
+            
+            const pct = (state.hp / CONFIG.hpMax) * 100;
+            el.hpBar.style.width = pct + '%';
+            el.hpBar.innerText = state.hp + '%';
+
+            el.attackBtn.disabled = (state.tokens <= 0 || state.isRespawning);
+            
+            if (state.posters > 0) {
+                el.challengeBtn.disabled = false;
+                el.challengeBtn.classList.add('active');
+                el.challengeBtn.innerText = "🔥 发起BOSS挑战";
+            } else {
+                el.challengeBtn.disabled = true;
+                el.challengeBtn.classList.remove('active');
+                el.challengeBtn.innerText = "📜 前往讨伐BOSS";
+            }
+        }
+    </script>
+</body>
+</html>
