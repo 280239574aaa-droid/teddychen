@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神秘魔法熔炉</title>
+    <style>
+        :root {
+            --bg-color: #1a0b2e;
+            --text-color: #e0d4fc;
+            
+            /* 能量等级颜色 */
+            --color-lv0: #7f8c8d; 
+            --color-lv1: #0984e3; 
+            --color-lv2: #e84393; 
+            --color-lv3: #fdcb6e; 
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex; flex-direction: column;
+            align-items: center;
+            min-height: 100vh; margin: 0; padding: 20px;
+            user-select: none;
+        }
+
+        /* 顶部信息 */
+        .header {
+            width: 100%; max-width: 420px;
+            display: flex; justify-content: space-between;
+            margin-bottom: 20px; padding: 10px;
+            background: rgba(0,0,0,0.3); border-radius: 10px;
+            font-size: 14px;
+        }
+
+        /* --- 熔炉区域 --- */
+        .furnace-wrapper {
+            position: relative;
+            width: 200px; height: 200px;
+            margin-bottom: 20px;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer;
+        }
+
+        .furnace {
+            font-size: 100px;
+            transition: all 0.5s ease;
+            position: relative; z-index: 2;
+            filter: drop-shadow(0 0 5px var(--color-lv0)) grayscale(0.8);
+            transform: scale(0.9);
+        }
+
+        /* 熔炉特效状态 */
+        .furnace.lv0 { filter: drop-shadow(0 0 5px var(--color-lv0)) grayscale(0.5); }
+        .furnace.lv1 { filter: drop-shadow(0 0 15px var(--color-lv1)); animation: breathe 3s infinite ease-in-out; }
+        .furnace.lv2 { filter: drop-shadow(0 0 25px var(--color-lv2)); animation: pulse 2s infinite ease-in-out; }
+        .furnace.lv3 { filter: drop-shadow(0 0 40px var(--color-lv3)) brightness(1.2); animation: shake-glow 1s infinite alternate; }
+        .furnace.smelting { animation: hard-shake 0.3s infinite !important; }
+
+        /* 概率提示 Tooltip */
+        .tooltip-base {
+            position: absolute; 
+            background: rgba(0,0,0,0.95); border: 1px solid #666;
+            padding: 10px 15px; border-radius: 8px; font-size: 12px;
+            text-align: left; opacity: 0; transition: all 0.3s;
+            pointer-events: none; z-index: 20;
+        }
+        .tooltip-base.show { opacity: 1; pointer-events: auto; }
+        .tooltip-base div { margin-bottom: 4px; display: flex; justify-content: space-between; gap: 10px; }
+
+        .prob-tooltip {
+            top: -70px; width: 180px; transform: translateY(10px); left: 50%; margin-left: -105px; /* 居中 */
+        }
+        .prob-tooltip.show { transform: translateY(0); }
+        
+        .click-hint { position: absolute; bottom: 0; font-size: 10px; color: rgba(255,255,255,0.4); pointer-events: none; }
+
+        @keyframes breathe { 50% { transform: scale(1.05); filter: drop-shadow(0 0 25px var(--color-lv1)); } }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); filter: drop-shadow(0 0 35px var(--color-lv2)); } 100% { transform: scale(1); } }
+        @keyframes shake-glow { from { transform: rotate(-2deg) scale(1.1); } to { transform: rotate(2deg) scale(1.15); filter: drop-shadow(0 0 50px var(--color-lv3)); } }
+        @keyframes hard-shake { 0% { transform: translate(2px, 2px); } 25% { transform: translate(-2px, -2px); } 50% { transform: translate(2px, -2px); } 75% { transform: translate(-2px, 2px); } }
+
+        /* --- 中间核心区 --- */
+        .input-section {
+            display: flex; align-items: center; justify-content: center;
+            gap: 15px; margin-bottom: 10px;
+            background: rgba(255,255,255,0.03); padding: 15px 25px; border-radius: 20px;
+        }
+
+        .slot {
+            width: 60px; height: 60px;
+            background: rgba(255,255,255,0.05); border: 2px dashed #666; border-radius: 12px;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 28px; transition: all 0.3s;
+        }
+        .slot.filled {
+            background: rgba(255,255,255,0.1); border-style: solid; border-color: var(--text-color);
+            box-shadow: 0 0 10px rgba(255,255,255,0.2); animation: slot-pop 0.3s;
+        }
+        @keyframes slot-pop { 50% { transform: scale(1.2); } }
+
+        /* 邀请 Icon */
+        .btn-invite-icon {
+            width: 45px; height: 45px; border-radius: 50%;
+            background: #0984e3; border: 2px solid rgba(255,255,255,0.3); color: white;
+            font-size: 24px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 4px 10px rgba(9, 132, 227, 0.4);
+            transition: transform 0.2s, background 0.2s; position: relative;
+        }
+        .btn-invite-icon:hover { background: #74b9ff; transform: scale(1.1); }
+        .btn-invite-icon:active { transform: scale(0.9); }
+        .invite-label {
+            position: absolute; top: -25px; 
+            font-size: 10px; background: #e17055; padding: 2px 6px; border-radius: 4px;
+            white-space: nowrap; animation: float-label 2s infinite;
+        }
+        @keyframes float-label { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);} }
+
+        /* 助力头像 */
+        .helper-container {
+            height: 40px; margin-bottom: 25px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .helper-avatar {
+            width: 30px; height: 30px; background: #333;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center;
+            border: 2px solid transparent; transition: all 0.3s; font-size: 14px;
+        }
+        .helper-avatar.active { border-color: var(--color-lv1); background: #2d3436; box-shadow: 0 0 8px var(--color-lv1); }
+
+        /* --- 底部操作栏 (3按钮并排) --- */
+        .action-row {
+            display: flex; width: 100%; max-width: 420px;
+            gap: 10px; align-items: stretch;
+            height: 56px; /* 固定高度确保对齐 */
+        }
+
+        .btn {
+            flex: 1; border: none; border-radius: 12px;
+            font-weight: bold; font-size: 14px; cursor: pointer; color: white;
+            transition: transform 0.1s, filter 0.2s;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            position: relative;
+        }
+        .btn:active { transform: scale(0.96); }
+        .btn:disabled { opacity: 0.5; filter: grayscale(1); cursor: not-allowed; }
+
+        /* 投入按钮 */
+        .btn-add {
+            background: #636e72; box-shadow: 0 4px 0 #2d3436;
+            flex: 0.8; /* 稍微窄一点 */
+            font-size: 14px; flex-direction: row; gap: 5px;
+        }
+
+        /* 熔炼按钮 */
+        .btn-smelt {
+            background: linear-gradient(to bottom, #d63031, #c0392b); 
+            box-shadow: 0 4px 0 #b33939; 
+            flex: 1.2; /* 最宽 */
+            font-size: 16px; flex-direction: row; gap: 5px;
+        }
+
+        /* 助力按钮 (新样式) */
+        .help-wrapper {
+            position: relative; flex: 0.8; /* 与投入按钮同宽 */
+        }
+        
+        .btn-help {
+            width: 100%; height: 100%;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+            box-shadow: 0 4px 0 #5f27cd;
+            line-height: 1.2;
+        }
+        
+        .btn-sub-text {
+            font-size: 10px; opacity: 0.8; font-weight: normal;
+        }
+
+        /* Tips 小问号角标 */
+        .help-tip-badge {
+            position: absolute; top: -8px; right: -5px;
+            width: 20px; height: 20px; background: #e17055;
+            border-radius: 50%; border: 2px solid var(--bg-color);
+            color: white; font-size: 12px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; z-index: 5;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .help-tip-badge:hover { transform: scale(1.1); background: #fab1a0; }
+
+        /* Tips 弹窗 (定位在按钮上方) */
+        .help-rewards-tooltip {
+            bottom: 70px; right: 0; width: 140px;
+            transform: translateY(10px);
+        }
+        .help-rewards-tooltip.show { transform: translateY(0); }
+
+
+        /* 调试与提示 */
+        .debug-area { margin-top: 40px; border-top: 1px dashed #444; padding-top: 15px; width: 100%; max-width: 400px; text-align: center; }
+        .log-box {
+            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px);
+            background: rgba(0,0,0,0.85); color: #fff;
+            padding: 12px 24px; border-radius: 30px; border: 1px solid #777;
+            pointer-events: none; opacity: 0; transition: all 0.3s; z-index: 100;
+        }
+        .log-box.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+        .res-fail { color: #b2bec3; }
+        .res-success { color: #55efc4; }
+        .res-great { color: #fdcb6e; font-weight: bold; }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>🔥 剩余次数: <span id="daily-limit">10</span>/10</div>
+        <div>🎒 万能道具: <span id="universal-count" style="color:#fdcb6e">0</span></div>
+    </div>
+
+    <!-- 熔炉主体 -->
+    <div class="furnace-wrapper" onclick="toggleProbability()">
+        <div class="tooltip-base prob-tooltip" id="prob-tooltip">
+            <div style="margin-bottom:8px; color:#aaa; font-size:10px;">当前能量等级: <span id="level-text">LV.0</span></div>
+            <div><span class="res-fail">● 失败 (返还1)</span> <span id="prob-fail">60%</span></div>
+            <div><span class="res-success">● 成功 (获得1)</span> <span id="prob-success">35%</span></div>
+            <div><span class="res-great">● 大成功 (获得1返1)</span> <span id="prob-great">5%</span></div>
+        </div>
+        
+        <div class="furnace lv0" id="furnace">🏺</div>
+        <div class="click-hint">👆 点击查看概率</div>
+    </div>
+
+    <!-- 中间：槽位 + 邀请Icon -->
+    <div class="input-section">
+        <div class="slot" id="slot-1"></div>
+        <div class="slot" id="slot-2"></div>
+        <button class="btn-invite-icon" onclick="shareToChat()" title="邀请好友助力">
+            <div class="invite-label">邀请</div>
+            ➕
+        </button>
+    </div>
+
+    <!-- 助力头像 -->
+    <div class="helper-container">
+        <div style="font-size:12px; color:#888; margin-right:10px;">好友助力:</div>
+        <div class="helper-avatar" id="helper-1"></div>
+        <div class="helper-avatar" id="helper-2"></div>
+        <div class="helper-avatar" id="helper-3"></div>
+    </div>
+    <div style="font-size: 12px; color: #666; margin-bottom: 20px;">需投入 2 个普通道具 (持有: <span id="normal-count">99</span>)</div>
+
+    <!-- 底部按钮栏：投入 | 熔炼 | 助力 -->
+    <div class="action-row">
+        <!-- 1. 投入 -->
+        <button class="btn btn-add" id="btn-add" onclick="addItem()">
+            <span>📥 投入</span>
+        </button>
+
+        <!-- 2. 熔炼 -->
+        <button class="btn btn-smelt" id="btn-smelt" onclick="startSmelt()" disabled>
+            <span>🔥 开始熔炼</span>
+        </button>
+
+        <!-- 3. 助力 (包含Tooltip结构) -->
+        <div class="help-wrapper">
+            <!-- 奖励说明 Tips 弹窗 -->
+            <div class="tooltip-base help-rewards-tooltip" id="help-rewards-tooltip">
+                <div style="color:#fdcb6e; font-weight:bold; margin-bottom:5px;">🎁 助力奖励概率</div>
+                <div><span>🪙 金币</span> <span>50%</span></div>
+                <div><span>⚡ 体力</span> <span>30%</span></div>
+                <div><span>🧪 道具</span> <span>20%</span></div>
+            </div>
+
+            <!-- 右上角问号角标 -->
+            <div class="help-tip-badge" onclick="toggleHelpRewards(event)">?</div>
+
+            <!-- 主按钮 -->
+            <button class="btn btn-help" onclick="goToChat()">
+                <span>🚀 前往助力</span>
+                <span class="btn-sub-text">可领奖 <span id="my-rewards-count">0</span>/5</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 模拟操作 -->
+    <div class="debug-area">
+        <button class="btn" style="background:#00b894; font-size:12px; padding:8px; flex-direction: row;" onclick="simulateFriendHelp()">
+            🤝 模拟: 有人帮了我 (+1 能量)
+        </button>
+    </div>
+
+    <div class="log-box" id="toast">提示信息</div>
+
+    <script>
+        // --- 核心配置 ---
+        const PROB_TABLE = [
+            { fail: 60, success: 35, great: 5,  name: "LV.0 黯淡" },
+            { fail: 40, success: 50, great: 10, name: "LV.1 微光" },
+            { fail: 20, success: 55, great: 25, name: "LV.2 充盈" },
+            { fail: 5,  success: 45, great: 50, name: "LV.3 狂暴" }
+        ];
+
+        let state = {
+            normalItems: 99,
+            universalItems: 0,
+            attemptsLeft: 10,
+            inputSlots: 0,
+            helpers: 0,
+            isSmelting: false,
+            myRewardsReceived: 0
+        };
+
+        const el = {
+            furnace: document.getElementById('furnace'),
+            probTooltip: document.getElementById('prob-tooltip'),
+            helpTooltip: document.getElementById('help-rewards-tooltip'),
+            dailyLimit: document.getElementById('daily-limit'),
+            normalCount: document.getElementById('normal-count'),
+            universalCount: document.getElementById('universal-count'),
+            btnAdd: document.getElementById('btn-add'),
+            btnSmelt: document.getElementById('btn-smelt'),
+            toast: document.getElementById('toast'),
+            myRewardsCount: document.getElementById('my-rewards-count'),
+            // Stats
+            levelText: document.getElementById('level-text'),
+            probFail: document.getElementById('prob-fail'),
+            probSuccess: document.getElementById('prob-success'),
+            probGreat: document.getElementById('prob-great')
+        };
+
+        // --- 1. 投入道具 ---
+        function addItem() {
+            if (state.isSmelting) return;
+            if (state.inputSlots >= 2) return showToast("槽位已满");
+            if (state.normalItems <= 0) return showToast("道具不足");
+            state.normalItems--;
+            state.inputSlots++;
+            updateUI();
+        }
+
+        // --- 2. 模拟好友助力 ---
+        function simulateFriendHelp() {
+            if (state.isSmelting) return showToast("熔炼中...");
+            if (state.helpers >= 3) return showToast("能量已达上限！");
+            state.helpers++;
+            showToast("好友助力成功！能量提升！");
+            updateUI();
+        }
+
+        // --- 3. 邀请分享 ---
+        function shareToChat() {
+            showToast("🔗 邀请链接已复制！");
+        }
+
+        // --- 4. 前往助力 ---
+        function goToChat() {
+            showToast("正在前往聊天频道...");
+        }
+
+        function toggleHelpRewards(e) {
+            e.stopPropagation(); // 防止触发按钮点击或冒泡
+            el.helpTooltip.classList.toggle('show');
+            if (el.helpTooltip.classList.contains('show')) {
+                setTimeout(() => el.helpTooltip.classList.remove('show'), 3000);
+            }
+        }
+
+        // --- 5. 熔炼逻辑 ---
+        function startSmelt() {
+            if (state.isSmelting) return;
+            if (state.inputSlots < 2) return;
+            if (state.attemptsLeft <= 0) return showToast("今日次数已用完");
+
+            state.isSmelting = true;
+            state.attemptsLeft--;
+            el.btnSmelt.disabled = true;
+            el.btnAdd.disabled = true;
+            
+            el.furnace.classList.add('smelting');
+            el.furnace.innerText = "🔥";
+            el.probTooltip.classList.remove('show');
+
+            setTimeout(() => {
+                const result = calculateResult();
+                processResult(result);
+            }, 2000);
+        }
+
+        function calculateResult() {
+            const probs = PROB_TABLE[state.helpers];
+            const rand = Math.random() * 100;
+            if (rand < probs.fail) return 'fail';
+            if (rand < probs.fail + probs.success) return 'success';
+            return 'great';
+        }
+
+        function processResult(type) {
+            el.furnace.classList.remove('smelting');
+            let msg = "";
+            if (type === 'fail') {
+                el.furnace.innerText = "💨";
+                state.normalItems += 1;
+                msg = "熔炼失败...返还 1 个普通道具";
+            } else if (type === 'success') {
+                el.furnace.innerText = "💎";
+                state.universalItems += 1;
+                msg = "熔炼成功！获得 1 个万能道具";
+            } else if (type === 'great') {
+                el.furnace.innerText = "🌟";
+                state.universalItems += 1;
+                state.normalItems += 1;
+                msg = "🌟大成功！🌟 获得万能道具，并返还初始道具！";
+            }
+            showToast(msg);
+            state.inputSlots = 0;
+            state.helpers = 0; 
+            setTimeout(() => {
+                state.isSmelting = false;
+                el.furnace.innerText = "🏺";
+                updateUI();
+            }, 2000);
+        }
+
+        // --- UI 更新 ---
+        function updateUI() {
+            el.dailyLimit.innerText = state.attemptsLeft;
+            el.normalCount.innerText = state.normalItems;
+            el.universalCount.innerText = state.universalItems;
+            el.myRewardsCount.innerText = state.myRewardsReceived;
+
+            // 槽位
+            for (let i = 1; i <= 2; i++) {
+                const slot = document.getElementById(`slot-${i}`);
+                if (i <= state.inputSlots) {
+                    slot.classList.add('filled');
+                    slot.innerText = "🧪";
+                } else {
+                    slot.classList.remove('filled');
+                    slot.innerText = "";
+                }
+            }
+            // 助力头像
+            for (let i = 1; i <= 3; i++) {
+                const avatar = document.getElementById(`helper-${i}`);
+                if (i <= state.helpers) {
+                    avatar.classList.add('active');
+                    avatar.innerText = "⚡";
+                } else {
+                    avatar.classList.remove('active');
+                    avatar.innerText = "";
+                }
+            }
+            // 按钮
+            const canSmelt = (state.inputSlots === 2 && state.attemptsLeft > 0 && !state.isSmelting);
+            el.btnSmelt.disabled = !canSmelt;
+            el.btnAdd.disabled = state.isSmelting;
+
+            // 熔炉特效
+            el.furnace.className = "furnace"; 
+            if (state.isSmelting) el.furnace.classList.add('smelting');
+            el.furnace.classList.add(`lv${state.helpers}`);
+
+            // 概率文案
+            const data = PROB_TABLE[state.helpers];
+            el.levelText.innerText = data.name;
+            el.levelText.style.color = `var(--color-lv${state.helpers})`;
+            el.probFail.innerText = data.fail + "%";
+            el.probSuccess.innerText = data.success + "%";
+            el.probGreat.innerText = data.great + "%";
+        }
+
+        function toggleProbability() {
+            if (state.isSmelting) return;
+            el.probTooltip.classList.toggle('show');
+            if (el.probTooltip.classList.contains('show')) {
+                setTimeout(() => el.probTooltip.classList.remove('show'), 3000);
+            }
+        }
+
+        function showToast(text) {
+            el.toast.innerText = text;
+            el.toast.classList.add('show');
+            setTimeout(() => el.toast.classList.remove('show'), 2500);
+        }
+
+        updateUI();
+        
+        // 全局点击监听，关闭弹窗
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.help-wrapper')) {
+                el.helpTooltip.classList.remove('show');
+            }
+            if (!e.target.closest('.furnace-wrapper')) {
+                el.probTooltip.classList.remove('show');
+            }
+        });
+
+    </script>
+</body>
+</html>

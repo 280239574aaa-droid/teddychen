@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大富翁·奇幻冒险</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --board-bg: #16213e;
+            --gold-reward: #ffd700;
+            --silver-reward: #c0c0c0;
+            --normal-reward: #4ecca3;
+            --highlight: #e94560;
+            --text-main: #ecf0f1;
+            --panel-bg: rgba(22, 33, 62, 0.95);
+        }
+
+        * { box-sizing: border-box; user-select: none; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden; /* 防止出现滚动条 */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- 顶部功能区 --- */
+        .top-bar {
+            position: absolute; top: 20px; right: 20px;
+            z-index: 100;
+            display: flex; flex-direction: column; align-items: flex-end;
+        }
+
+        .btn-rank-toggle {
+            background: rgba(0,0,0,0.4);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: var(--gold-reward);
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            backdrop-filter: blur(5px);
+            transition: 0.2s;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .btn-rank-toggle:hover { background: rgba(255,255,255,0.1); }
+
+        /* 排行榜面板 (默认隐藏) */
+        .rank-panel {
+            width: 250px;
+            background: var(--panel-bg);
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            transform-origin: top right;
+            transform: scale(0); opacity: 0; /* 隐藏状态 */
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .rank-panel.open {
+            transform: scale(1); opacity: 1;
+        }
+        .rank-list { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .rank-list td { padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .rank-num { width: 30px; font-weight: bold; color: #f39c12; }
+        .rank-name { text-align: left; }
+        .rank-steps { text-align: right; color: #2ecc71; }
+        .rank-me { color: var(--highlight); font-weight: bold; }
+
+        /* --- 主游戏区 --- */
+        .game-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* 垂直居中 */
+            align-items: center;
+            width: 100%;
+            position: relative;
+            padding-bottom: 140px; /* 给底部控制栏留空间 */
+        }
+
+        /* 棋盘容器 */
+        .board-wrapper {
+            width: 540px; height: 540px; /* 稍微调小一点适配屏幕 */
+            background: var(--board-bg);
+            border-radius: 20px;
+            position: relative;
+            box-shadow: 0 0 40px rgba(0,0,0,0.6);
+            border: 8px solid #30475e;
+            transition: transform 0.3s;
+        }
+
+        /* 如果屏幕太矮，自动缩小棋盘 */
+        @media (max-height: 800px) {
+            .board-wrapper { transform: scale(0.85); }
+        }
+
+        /* 棋盘格子 */
+        .tile {
+            position: absolute;
+            width: 45px; height: 45px; /* 格子也对应调小 */
+            border: 1px solid rgba(255,255,255,0.05);
+            display: flex; align-items: center; justify-content: center;
+            border-radius: 6px;
+            font-size: 1.2rem;
+        }
+        
+        .tile.empty { background: rgba(255,255,255,0.02); }
+        .tile.normal { background: rgba(78, 204, 163, 0.15); border: 1px solid var(--normal-reward); }
+        .tile.silver { background: rgba(192, 192, 192, 0.25); border: 1px solid var(--silver-reward); box-shadow: inset 0 0 10px rgba(192,192,192,0.3); }
+        .tile.gold { background: rgba(255, 215, 0, 0.25); border: 1px solid var(--gold-reward); box-shadow: inset 0 0 15px rgba(255,215,0,0.4); animation: glow 2s infinite; }
+
+        @keyframes glow { 50% { box-shadow: inset 0 0 25px rgba(255,215,0,0.8); } }
+
+        /* 玩家棋子 */
+        .player-token {
+            position: absolute;
+            width: 36px; height: 36px;
+            background: var(--highlight);
+            border-radius: 50%;
+            border: 3px solid white;
+            z-index: 10;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.5);
+            transition: top 0.2s linear, left 0.2s linear;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+
+        /* 中间信息 */
+        .center-hub {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; width: 300px;
+        }
+        .center-hub h1 { margin: 0; color: var(--gold-reward); font-size: 2rem; text-shadow: 0 2px 10px rgba(0,0,0,0.8); }
+        .steps-label { color: #bdc3c7; margin-top: 10px; font-size: 1.1rem; }
+
+        /* --- 底部控制栏 (固定底部) --- */
+        .bottom-dock {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            height: 140px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+            display: flex; align-items: center; justify-content: center;
+            gap: 40px;
+            padding: 0 40px;
+            z-index: 50;
+        }
+
+        /* 左侧：奖励暂存栏 */
+        .reward-section {
+            flex: 1; max-width: 600px;
+            display: flex; align-items: center; gap: 15px;
+            background: rgba(255,255,255,0.05);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .reward-slots {
+            flex: 1; height: 60px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            display: flex; align-items: center;
+            padding: 0 10px; gap: 10px;
+            overflow-x: auto; /* 允许横向滚动 */
+        }
+        
+        .reward-item {
+            min-width: 44px; height: 44px;
+            background: #2c3e50;
+            border: 1px solid #7f8c8d;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.2rem;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .reward-item.gold { border-color: var(--gold-reward); box-shadow: 0 0 5px var(--gold-reward); }
+        
+        @keyframes popIn { from { transform: scale(0); } to { transform: scale(1); } }
+
+        .btn-claim {
+            width: 100px; height: 50px;
+            background: linear-gradient(to bottom, #2ecc71, #27ae60);
+            color: white; border: none; border-radius: 8px;
+            font-weight: bold; cursor: pointer;
+            box-shadow: 0 4px 0 #1e8449;
+        }
+        .btn-claim:active { transform: translateY(2px); box-shadow: 0 2px 0 #1e8449; }
+        .btn-claim:disabled { filter: grayscale(1); cursor: default; box-shadow: none; transform: none; }
+
+        /* 右侧：操作区 */
+        .controls-section {
+            display: flex; gap: 20px;
+        }
+        .dice-group { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        
+        .dice-btn {
+            width: 140px; height: 50px;
+            border: none; border-radius: 25px;
+            font-weight: bold; font-size: 1rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            transition: transform 0.1s;
+        }
+        .dice-btn:active { transform: scale(0.95); }
+        
+        .btn-normal { background: linear-gradient(45deg, #3498db, #2980b9); color: white; box-shadow: 0 4px 0 #1a5276; }
+        .btn-magic { background: linear-gradient(45deg, #9b59b6, #8e44ad); color: white; box-shadow: 0 4px 0 #6c3483; }
+        
+        .count-badge { font-size: 0.8rem; color: #bdc3c7; background: rgba(0,0,0,0.4); padding: 2px 8px; border-radius: 8px; }
+
+        /* 弹窗：万能骰子 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7); z-index: 200;
+            justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background: #2c3e50; padding: 25px; border-radius: 15px;
+            text-align: center; border: 2px solid var(--highlight);
+        }
+        .magic-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .magic-opt {
+            width: 50px; height: 50px; font-size: 1.2rem;
+            background: #ecf0f1; border: none; border-radius: 8px; cursor: pointer;
+        }
+        .magic-opt:hover { background: var(--highlight); color: white; }
+
+        /* 获得奖励时的飘字 */
+        .float-text {
+            position: absolute;
+            color: var(--gold-reward);
+            font-weight: bold; font-size: 1.5rem;
+            pointer-events: none; z-index: 100;
+            text-shadow: 0 0 5px black;
+            animation: floatUp 1s ease-out forwards;
+        }
+        @keyframes floatUp { to { transform: translateY(-80px); opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部：排行榜开关 -->
+    <div class="top-bar">
+        <button class="btn-rank-toggle" onclick="toggleRank()">
+            <span>🏆</span> 步数排行榜
+            <span style="font-size:0.8em">▼</span>
+        </button>
+        
+        <!-- 2. 排行榜面板 (绝对定位在按钮下方) -->
+        <div class="rank-panel" id="rank-panel">
+            <h4 style="margin:0 0 10px 0; color:#bdc3c7; border-bottom:1px solid #444; padding-bottom:5px;">实时排名</h4>
+            <table class="rank-list" id="rank-table">
+                <!-- JS生成内容 -->
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. 中间游戏区 -->
+    <div class="game-area">
+        <div class="board-wrapper" id="board">
+            <div class="center-hub">
+                <h1>奇幻大富翁</h1>
+                <div class="steps-label">累计行走: <span id="total-steps" style="color:white; font-weight:bold; font-size:1.4em;">0</span> 步</div>
+            </div>
+            <!-- 玩家 -->
+            <div class="player-token" id="player">♟️</div>
+        </div>
+    </div>
+
+    <!-- 4. 底部控制与奖励栏 -->
+    <div class="bottom-dock">
+        
+        <!-- 左侧：奖励展示 + 领取 -->
+        <div class="reward-section">
+            <div style="font-size:0.9rem; color:#bdc3c7; width:40px; line-height:1.2;">战利品<br>背包</div>
+            <!-- 存放获得的奖励图标 -->
+            <div class="reward-slots" id="reward-slots">
+                <span style="color:#555; font-size:0.8rem; margin-left:10px;">暂无奖励...</span>
+            </div>
+            <button class="btn-claim" onclick="claimRewards()" id="btn-claim" disabled>
+                一键领取
+            </button>
+        </div>
+
+        <!-- 右侧：骰子控制 -->
+        <div class="controls-section">
+            <div class="dice-group">
+                <button class="dice-btn btn-normal" onclick="rollNormalDice()" id="btn-normal">
+                    🎲 掷骰子
+                </button>
+                <span class="count-badge">无限次数</span>
+            </div>
+            
+            <div class="dice-group">
+                <button class="dice-btn btn-magic" onclick="openMagicModal()" id="btn-magic">
+                    ✨ 万能骰子
+                </button>
+                <span class="count-badge">剩余: <span id="magic-count">3</span></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 万能骰子弹窗 -->
+    <div class="modal-overlay" id="magic-modal" onclick="closeMagicModal(event)">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color:white;">指定步数</h3>
+            <div class="magic-grid">
+                <button class="magic-opt" onclick="useMagicDice(1)">1</button>
+                <button class="magic-opt" onclick="useMagicDice(2)">2</button>
+                <button class="magic-opt" onclick="useMagicDice(3)">3</button>
+                <button class="magic-opt" onclick="useMagicDice(4)">4</button>
+                <button class="magic-opt" onclick="useMagicDice(5)">5</button>
+                <button class="magic-opt" onclick="useMagicDice(6)">6</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 配置 ---
+        const TOTAL_TILES = 40;
+        const SIDE_COUNT = 11; // 每边格子数(含角)
+        const BOARD_WIDTH = 540; // 对应CSS中的宽度
+        const TILE_SIZE = 45;    // 对应CSS中的格子大小
+        
+        // --- 状态 ---
+        let state = {
+            pos: 0,
+            totalSteps: 0,
+            magicDice: 3,
+            isMoving: false,
+            tiles: [],
+            inventory: [] // 暂存奖励
+        };
+
+        let leaderboard = [
+            { name: "龙之子", steps: 156 },
+            { name: "冒险者A", steps: 98 },
+            { name: "路人甲", steps: 45 },
+            { name: "我 (You)", steps: 0, isMe: true },
+            { name: "萌新", steps: 10 }
+        ];
+
+        // --- 初始化 ---
+        function init() {
+            createBoard();
+            updateUI();
+            updateRank();
+        }
+
+        // --- 1. 创建棋盘 (环形坐标计算) ---
+        function createBoard() {
+            const board = document.getElementById('board');
+            // 计算间隔：(总宽 - 格子宽) / (间隙数量)
+            const gap = (BOARD_WIDTH - TILE_SIZE) / (SIDE_COUNT - 1);
+
+            for (let i = 0; i < TOTAL_TILES; i++) {
+                let x, y;
+                // 0-10: Top (Left->Right)
+                if (i <= 10) { x = i * gap; y = 0; }
+                // 11-19: Right (Top->Bottom)
+                else if (i <= 20) { x = BOARD_WIDTH - TILE_SIZE; y = (i - 10) * gap; }
+                // 21-29: Bottom (Right->Left)
+                else if (i <= 30) { x = (BOARD_WIDTH - TILE_SIZE) - ((i - 20) * gap); y = BOARD_WIDTH - TILE_SIZE; }
+                // 31-39: Left (Bottom->Top)
+                else { x = 0; y = (BOARD_WIDTH - TILE_SIZE) - ((i - 30) * gap); }
+
+                // 随机奖励属性
+                let type = 'normal', icon = '💰', name = '金币';
+                let rand = Math.random();
+                if (rand > 0.85) { type = 'gold'; icon = '👑'; name = '皇冠'; }
+                else if (rand > 0.6) { type = 'silver'; icon = '💎'; name = '宝石'; }
+                else if (rand > 0.3) { type = 'empty'; icon = ''; name = ''; }
+
+                state.tiles.push({ x, y, type, icon, name });
+
+                const el = document.createElement('div');
+                el.className = `tile ${type}`;
+                el.style.left = x + 'px';
+                el.style.top = y + 'px';
+                el.innerHTML = icon;
+                board.appendChild(el);
+            }
+            updatePlayerPos(0);
+        }
+
+        // --- 2. 移动逻辑 ---
+        async function movePlayer(steps) {
+            if (state.isMoving) return;
+            state.isMoving = true;
+            toggleButtons(false);
+
+            for (let i = 0; i < steps; i++) {
+                state.pos = (state.pos + 1) % TOTAL_TILES;
+                state.totalSteps++;
+                updatePlayerPos(state.pos);
+                document.getElementById('total-steps').innerText = state.totalSteps;
+                await new Promise(r => setTimeout(r, 150));
+            }
+
+            state.isMoving = false;
+            toggleButtons(true);
+            updateRank();
+            checkReward();
+        }
+
+        function updatePlayerPos(idx) {
+            const t = state.tiles[idx];
+            const p = document.getElementById('player');
+            // 居中偏移: (格子宽45 - 棋子宽36)/2 = 4.5
+            p.style.left = (t.x + 4.5) + 'px';
+            p.style.top = (t.y + 4.5) + 'px';
+        }
+
+        function checkReward() {
+            const t = state.tiles[state.pos];
+            if (t.type !== 'empty') {
+                // 飘字特效
+                showFloatText(`+${t.icon}`);
+                // 加入背包
+                addToInventory(t);
+            }
+        }
+
+        // --- 3. 奖励背包逻辑 ---
+        function addToInventory(tile) {
+            state.inventory.push(tile);
+            renderInventory();
+        }
+
+        function renderInventory() {
+            const container = document.getElementById('reward-slots');
+            const btn = document.getElementById('btn-claim');
+
+            if (state.inventory.length === 0) {
+                container.innerHTML = '<span style="color:#7f8c8d; font-size:0.8rem; margin-left:10px;">暂无奖励...</span>';
+                btn.disabled = true;
+                return;
+            }
+
+            container.innerHTML = '';
+            state.inventory.forEach(item => {
+                const div = document.createElement('div');
+                div.className = `reward-item ${item.type}`;
+                div.innerText = item.icon;
+                container.appendChild(div);
+            });
+            
+            // 自动滚动到最新
+            container.scrollLeft = container.scrollWidth;
+            btn.disabled = false;
+        }
+
+        function claimRewards() {
+            if (state.inventory.length === 0) return;
+            alert(`成功领取 ${state.inventory.length} 个奖励！\n背包已清空。`);
+            state.inventory = [];
+            renderInventory();
+        }
+
+        // --- 4. 骰子控制 ---
+        function rollNormalDice() {
+            const s = Math.floor(Math.random() * 6) + 1;
+            movePlayer(s);
+        }
+
+        function openMagicModal() {
+            if (state.magicDice > 0) document.getElementById('magic-modal').style.display = 'flex';
+            else alert('万能骰子用光了！');
+        }
+        function closeMagicModal(e) {
+            if (e.target.id === 'magic-modal') document.getElementById('magic-modal').style.display = 'none';
+        }
+        function useMagicDice(n) {
+            state.magicDice--;
+            document.getElementById('magic-modal').style.display = 'none';
+            updateUI();
+            movePlayer(n);
+        }
+
+        // --- 5. 排行榜 & UI ---
+        function toggleRank() {
+            const panel = document.getElementById('rank-panel');
+            panel.classList.toggle('open');
+        }
+
+        function updateRank() {
+            // 更新自己
+            leaderboard.find(x => x.isMe).steps = state.totalSteps;
+            // 排序
+            leaderboard.sort((a,b) => b.steps - a.steps);
+            
+            const tbody = document.getElementById('rank-table');
+            tbody.innerHTML = '';
+            leaderboard.forEach((d, i) => {
+                const tr = document.createElement('tr');
+                if (d.isMe) tr.style.background = "rgba(233, 69, 96, 0.1)";
+                tr.innerHTML = `
+                    <td class="rank-num">${i+1}</td>
+                    <td class="rank-name" style="${d.isMe?'color:#e94560;font-weight:bold':''}">${d.name}</td>
+                    <td class="rank-steps">${d.steps}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function updateUI() {
+            document.getElementById('magic-count').innerText = state.magicDice;
+        }
+
+        function toggleButtons(enable) {
+            document.getElementById('btn-normal').disabled = !enable;
+            document.getElementById('btn-magic').disabled = !enable;
+            document.getElementById('btn-claim').disabled = !enable || state.inventory.length === 0;
+        }
+
+        function showFloatText(txt) {
+            const player = document.getElementById('player');
+            const el = document.createElement('div');
+            el.className = 'float-text';
+            el.innerText = txt;
+            // 获取当前棋子位置，在其上方显示
+            el.style.left = player.style.left;
+            el.style.top = player.style.top;
+            document.getElementById('board').appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
