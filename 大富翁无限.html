@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无尽征途 - 布局优化版</title>
+    <style>
+        :root {
+            --sky-top: #81ecec;
+            --sky-btm: #74b9ff;
+            --ground: #636e72;
+            --tile-w: 80px;
+            /* 1. 布局尺寸调整 */
+            --top-height: 100px;  /* 顶部增高 */
+            --dock-height: 220px; /* 底部大幅增高 */
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: linear-gradient(to bottom, var(--sky-top), var(--sky-btm));
+            color: #2d3436;
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            height: 100vh;
+            display: flex; flex-direction: column;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* --- 1. 顶部栏 (增高) --- */
+        .top-bar {
+            padding: 0 30px; 
+            height: var(--top-height); /* 增高 */
+            display: flex; justify-content: space-between; align-items: center;
+            background: rgba(255,255,255,0.4); backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            z-index: 10; flex-shrink: 0;
+        }
+        .stats { 
+            font-size: 18px; /* 字体加大 */
+            font-weight: bold; color: #2d3436; 
+        }
+        .stats span { color: #d63031; font-size: 1.4em; font-family: monospace; font-weight: 900; }
+        
+        .btn-rank {
+            background: #6c5ce7; color: white; padding: 10px 20px; border-radius: 30px;
+            cursor: pointer; font-size: 14px; border: none; font-weight: bold;
+            box-shadow: 0 4px 0 #4834d4; transition: transform 0.1s;
+        }
+        .btn-rank:active { transform: translateY(4px); box-shadow: none; }
+
+
+        /* --- 2. 主舞台 --- */
+        .main-stage {
+            flex: 1; /* 占据剩余空间 */
+            position: relative; overflow: hidden;
+            display: flex; align-items: flex-end; /* 底部对齐 */
+        }
+
+        /* 强化视觉：悬浮的地图大按钮 (中部区域) */
+        .big-map-btn-wrapper {
+            position: absolute;
+            right: 30px; top: 40%; /* 垂直居中偏上 */
+            transform: translateY(-50%);
+            z-index: 90;
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer;
+            filter: drop-shadow(0 10px 10px rgba(0,0,0,0.3));
+            animation: float-btn 3s infinite ease-in-out;
+        }
+        
+        .big-map-btn {
+            width: 80px; height: 80px;
+            background: linear-gradient(135deg, #f1c40f, #f39c12);
+            border: 4px solid #fff; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 40px; color: #fff;
+            box-shadow: inset 0 0 20px rgba(255,255,255,0.5);
+            transition: transform 0.2s;
+        }
+        .big-map-btn:active { transform: scale(0.9); }
+        
+        .map-label-tag {
+            background: #e67e22; color: white; padding: 5px 12px;
+            border-radius: 12px; font-size: 12px; font-weight: bold;
+            margin-top: -15px; border: 2px solid white;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        @keyframes float-btn { 0%,100%{transform:translateY(-50%);} 50%{transform:translateY(-55%);} }
+
+
+        /* 跑道 */
+        .track-container {
+            display: flex; height: 100%; padding-left: 50vw;
+            transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            will-change: transform; align-items: flex-end;
+        }
+
+        .level-unit {
+            width: var(--tile-w); height: 100%; margin-right: 2px; flex-shrink: 0;
+            position: relative; display: flex; flex-direction: column; justify-content: flex-end;
+        }
+
+        /* 地面 */
+        .ground-block {
+            height: 80px; /* 地面稍微增厚 */
+            background: var(--ground);
+            border-top: 8px solid #55efc4;
+            position: relative; display: flex; align-items: center; justify-content: center;
+            font-size: 14px; color: rgba(255,255,255,0.5); font-weight: bold;
+        }
+        .ground-block::after {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.1) 10px, rgba(0,0,0,0.1) 20px);
+        }
+
+        /* 天空奖励 (位置调整) */
+        .sky-reward {
+            position: absolute; bottom: 200px; /* 提高高度 */
+            left: 50%; transform: translateX(-50%);
+            width: 70px; height: 70px; display: flex; align-items: center; justify-content: center;
+            font-size: 40px; filter: drop-shadow(0 5px 5px rgba(0,0,0,0.2));
+            animation: float 2s infinite ease-in-out; transition: all 0.3s;
+        }
+        .sky-reward.collected {
+            opacity: 0.3; filter: grayscale(1); transform: scale(0.8) translateX(-60%); animation: none;
+        }
+        @keyframes float { 0%,100%{transform:translateY(0) translateX(-50%);} 50%{transform:translateY(-15px) translateX(-50%);} }
+
+        /* 玩家 */
+        .player {
+            position: absolute; left: 50vw; 
+            bottom: 85px; /* 适配增厚的地面 (80+5) */
+            margin-left: -30px; width: 60px; height: 84px; /* 稍微放大 */
+            background: url('https://api.iconify.design/noto:person-running.svg') no-repeat bottom center/contain;
+            z-index: 50; transition: transform 0.1s; filter: drop-shadow(2px 4px 5px rgba(0,0,0,0.3));
+        }
+        .player.run { animation: run-bob 0.2s infinite alternate; }
+        @keyframes run-bob { from{transform:translateY(0);} to{transform:translateY(-5px);} }
+
+        /* --- 3. 底部栏 (大幅增高) --- */
+        .dock {
+            height: var(--dock-height); 
+            background: #fff; border-top: 6px solid #dfe6e9;
+            display: flex; padding: 0 30px; 
+            box-shadow: 0 -10px 40px rgba(0,0,0,0.15);
+            position: relative; z-index: 60;
+        }
+
+        /* 背包区 */
+        .dock-left {
+            flex: 1.3; display: flex; flex-direction: column; justify-content: center;
+            border-right: 2px solid #dfe6e9; padding-right: 20px; margin-right: 20px;
+        }
+        .bag-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .bag-title { font-size: 16px; font-weight: bold; color: #636e72; display: flex; align-items: center; gap: 5px; }
+        
+        .bag-scroll {
+            height: 90px; /* 增大背包 */
+            background: #f1f2f6; border-radius: 12px; border: 2px inset #dfe6e9;
+            display: flex; align-items: center; gap: 10px; padding: 0 15px; overflow-x: auto;
+        }
+        .bag-item {
+            width: 60px; height: 60px; /* 增大物品 */
+            background: white; border-radius: 10px; border: 1px solid #ced6e0;
+            display: flex; align-items: center; justify-content: center; font-size: 30px; flex-shrink: 0;
+            animation: pop 0.3s;
+        }
+        @keyframes pop { from{transform:scale(0);} to{transform:scale(1);} }
+
+        .btn-claim {
+            background: #00b894; color: white; border: none; padding: 8px 15px; border-radius: 20px;
+            font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 0 #008f72;
+            transition: 0.1s;
+        }
+        .btn-claim:active { transform: translateY(4px); box-shadow: none; }
+        .btn-claim:disabled { background: #b2bec3; box-shadow: none; cursor: default; transform: none;}
+
+        /* 控制区 */
+        .dock-right { flex: 1; display: flex; align-items: center; justify-content: space-around; }
+        
+        .dice-btn {
+            width: 100px; height: 80px; /* 加大按钮 */
+            border: none; border-radius: 15px; color: white; font-weight: bold;
+            cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.2); transition: transform 0.1s;
+        }
+        .dice-btn:active { transform: translateY(6px); box-shadow: none; }
+        .dice-btn:disabled { filter: grayscale(1); cursor: not-allowed; }
+        
+        .btn-normal { background: linear-gradient(to bottom, #0984e3, #74b9ff); }
+        .btn-magic { background: linear-gradient(to bottom, #e84393, #fd79a8); }
+
+        .dice-val {
+            width: 70px; height: 70px; background: #2d3436; color: white;
+            font-size: 36px; font-weight: bold; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        }
+
+        /* --- 地图弹窗样式 (保持不变) --- */
+        .modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); z-index: 200;
+            justify-content: center; align-items: center;
+        }
+        .modal-box {
+            width: 95%; height: 70%; background: #fdf5e6; border-radius: 15px;
+            display: flex; flex-direction: column; border: 4px solid #d4a373;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            position: relative; overflow: hidden;
+        }
+        
+        .map-header {
+            padding: 10px 15px; background: #d4a373; color: white; font-weight: bold;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .map-scroll-view {
+            flex: 1; overflow-x: auto; overflow-y: hidden;
+            position: relative; 
+            background-image: radial-gradient(#e0c39e 10%, transparent 11%);
+            background-size: 20px 20px;
+            background-color: #fae3c6;
+        }
+
+        .map-canvas { position: relative; height: 100%; }
+        .map-lines-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+
+        .map-node {
+            position: absolute; width: 60px; height: 60px;
+            background: #2d3436; border: 3px solid #636e72; border-radius: 12px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 2; box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+            font-size: 10px; color: white; font-weight: bold;
+            transition: transform 0.2s;
+        }
+        .map-node.reward-node { background: #6c5ce7; border-color: #a29bfe; }
+        .map-node.coin-node { background: #0984e3; border-color: #74b9ff; }
+        .node-icon { font-size: 24px; margin-bottom: -4px; }
+        
+        .player-indicator {
+            position: absolute; width: 40px; height: 50px; z-index: 10;
+            background: url('https://api.iconify.design/noto:person-running.svg') no-repeat center/contain;
+            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
+            transition: all 0.5s ease; top: 0; left: 0; 
+        }
+        .player-indicator::after {
+            content: '▼'; position: absolute; bottom: -15px; left: 50%; transform: translateX(-50%);
+            color: #d63031; font-size: 14px; animation: bounce 1s infinite;
+        }
+        @keyframes bounce { 0%,100%{transform:translate(-50%, 0);} 50%{transform:translate(-50%, 5px);} }
+
+        /* 万能骰子 */
+        .magic-modal { background: white; padding: 20px; border-radius: 10px; text-align: center; max-width: 300px; }
+        .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .num-btn { padding: 15px; background: #eee; border: none; font-size: 18px; border-radius: 8px; cursor: pointer; }
+        .num-btn:hover { background: #e84393; color: white; }
+
+        .rank-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        .rank-table td { padding: 8px; border-bottom: 1px solid #eee; }
+
+    </style>
+</head>
+<body>
+
+    <!-- 1. 顶部栏 (增高) -->
+    <div class="top-bar">
+        <div class="stats">当前关卡: <span id="pos-display">1</span></div>
+        <button class="btn-rank" onclick="openModal('rank')">🏆 步数排行榜</button>
+    </div>
+
+    <!-- 2. 主舞台 -->
+    <div class="main-stage">
+        <div class="track-container" id="track"></div>
+        <div class="player" id="player"></div>
+
+        <!-- 强化视觉：全景地图按钮 (悬浮在右侧中部) -->
+        <div class="big-map-btn-wrapper" onclick="openMap()">
+            <div class="big-map-btn">🗺️</div>
+            <div class="map-label-tag">冒险地图</div>
+        </div>
+    </div>
+
+    <!-- 3. 底部控制栏 (大幅增高) -->
+    <div class="dock">
+        <!-- 背包 -->
+        <div class="dock-left">
+            <div class="bag-header">
+                <div class="bag-title">🎒 战利品背包</div>
+                <button class="btn-claim" id="btn-claim" onclick="claimAll()" disabled>一键领取</button>
+            </div>
+            <div class="bag-scroll" id="bag-container">
+                <span style="font-size:14px; color:#b2bec3; width:100%; text-align:center;">暂无道具</span>
+            </div>
+        </div>
+
+        <!-- 骰子 -->
+        <div class="dock-right">
+            <button class="dice-btn btn-normal" onclick="rollDice()" id="btn-normal">
+                <span style="font-size:24px">🎲</span>
+                <span style="font-size:12px; margin-top:5px;">随机投掷</span>
+            </button>
+
+            <div class="dice-val" id="dice-val">?</div>
+
+            <button class="dice-btn btn-magic" onclick="openModal('magic')" id="btn-magic">
+                <span style="font-size:24px">✨</span>
+                <span style="font-size:12px; margin-top:5px;">剩余: <span id="magic-count">3</span></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 弹窗：地图 -->
+    <div class="modal" id="modal-map">
+        <div class="modal-box">
+            <div class="map-header">
+                <span>🗺️ 冒险地图</span>
+                <button onclick="closeModal('map')" style="background:none; border:none; color:white; font-size:24px; cursor:pointer;">×</button>
+            </div>
+            <div class="map-scroll-view" id="map-scroll-view">
+                <div class="map-canvas" id="map-canvas">
+                    <svg class="map-lines-svg" id="map-lines"></svg>
+                    <div class="player-indicator" id="map-player"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：万能骰子 -->
+    <div class="modal" id="modal-magic">
+        <div class="magic-modal">
+            <h3>✨ 指定步数</h3>
+            <div class="grid-6">
+                <button class="num-btn" onclick="useMagic(1)">1</button>
+                <button class="num-btn" onclick="useMagic(2)">2</button>
+                <button class="num-btn" onclick="useMagic(3)">3</button>
+                <button class="num-btn" onclick="useMagic(4)">4</button>
+                <button class="num-btn" onclick="useMagic(5)">5</button>
+                <button class="num-btn" onclick="useMagic(6)">6</button>
+            </div>
+            <button onclick="closeModal('magic')" style="margin-top:15px; background:none; border:none; cursor:pointer; color:#999; font-size:14px;">取消操作</button>
+        </div>
+    </div>
+
+    <!-- 弹窗：排行榜 -->
+    <div class="modal" id="modal-rank">
+        <div class="magic-modal" style="width:300px;">
+            <div style="display:flex; justify-content:space-between;">
+                <h3>🏆 排行榜</h3>
+                <button onclick="closeModal('rank')" style="border:none;background:none;font-size:20px;">×</button>
+            </div>
+            <table class="rank-table" id="rank-table"></table>
+        </div>
+    </div>
+
+    <script>
+        const TOTAL_TILES = 100;
+        const TILE_W = 82; 
+        
+        let state = {
+            pos: 0,
+            magic: 3,
+            isMoving: false,
+            data: [],
+            bag: []
+        };
+
+        const trackEl = document.getElementById('track');
+        const playerEl = document.getElementById('player');
+        
+        function init() {
+            for(let i=0; i<TOTAL_TILES; i++) {
+                let r = null;
+                if(i===TOTAL_TILES-1) r='🏆';
+                else if(i>0) {
+                    let rand = Math.random();
+                    if(rand>0.9) r='🎁';
+                    else if(rand>0.8) r='🪙';
+                    else if(rand>0.7) r='🧪';
+                }
+                state.data.push({id:i, reward:r});
+            }
+
+            let html = '';
+            state.data.forEach(d => {
+                let sky = d.reward ? `<div class="sky-reward" id="reward-${d.id}">${d.reward}</div>` : '';
+                html += `
+                    <div class="level-unit">
+                        ${sky}
+                        <div class="ground-block">${d.id+1}</div>
+                    </div>`;
+            });
+            trackEl.innerHTML = html;
+
+            updateUI();
+        }
+
+        function updateUI() {
+            const offset = -(state.pos * TILE_W);
+            trackEl.style.transform = `translateX(${offset}px)`;
+            document.getElementById('pos-display').innerText = state.pos + 1;
+            document.getElementById('magic-count').innerText = state.magic;
+        }
+
+        async function move(steps) {
+            if(state.isMoving) return;
+            state.isMoving = true;
+            document.getElementById('btn-normal').disabled = true;
+            document.getElementById('btn-magic').disabled = true;
+
+            playerEl.classList.add('run');
+
+            for(let i=0; i<steps; i++) {
+                if(state.pos >= TOTAL_TILES-1) break;
+                state.pos++;
+                updateUI();
+                
+                let d = state.data[state.pos];
+                if(d.reward) {
+                    let el = document.getElementById(`reward-${d.id}`);
+                    if(el && !el.classList.contains('collected')) {
+                        el.classList.add('collected');
+                        addToBag(d.reward);
+                    }
+                }
+                await new Promise(r => setTimeout(r, 300));
+            }
+
+            playerEl.classList.remove('run');
+            state.isMoving = false;
+            document.getElementById('btn-normal').disabled = false;
+            if(state.magic > 0) document.getElementById('btn-magic').disabled = false;
+        }
+
+        function renderMap() {
+            const canvas = document.getElementById('map-canvas');
+            const svg = document.getElementById('map-lines');
+            Array.from(canvas.querySelectorAll('.map-node')).forEach(el => el.remove());
+
+            const nodeW = 60, nodeH = 60;
+            const xStep = 120; 
+            const yBase = 200; // 调高基准线，适应更大的视口
+            const yAmp = 100;  // 增大波浪幅度
+
+            const totalW = (TOTAL_TILES * xStep) + 100;
+            canvas.style.width = totalW + 'px';
+
+            let points = [];
+            let pathD = "";
+
+            state.data.forEach((d, i) => {
+                let x = 60 + (i * xStep);
+                let y = yBase + Math.sin(i * 0.8) * yAmp;
+
+                points.push({x, y});
+
+                let div = document.createElement('div');
+                div.className = 'map-node';
+                if(d.reward) {
+                    div.classList.add(d.reward === '🪙' ? 'coin-node' : 'reward-node');
+                }
+                div.style.left = (x - nodeW/2) + 'px';
+                div.style.top = (y - nodeH/2) + 'px';
+                
+                let icon = d.reward ? `<div class="node-icon">${d.reward}</div>` : '';
+                div.innerHTML = `${icon}<div>${d.id+1}</div>`;
+                
+                if(d.id === state.pos) {
+                    const indicator = document.getElementById('map-player');
+                    indicator.style.left = (x - 20) + 'px';
+                    indicator.style.top = (y - 70) + 'px';
+                }
+                canvas.appendChild(div);
+            });
+
+            if(points.length > 1) {
+                pathD = `M ${points[0].x} ${points[0].y}`;
+                for(let i=1; i<points.length; i++) {
+                    let p1 = points[i-1];
+                    let p2 = points[i];
+                    let cp1x = p1.x + (p2.x - p1.x) / 2;
+                    let cp1y = p1.y;
+                    let cp2x = p1.x + (p2.x - p1.x) / 2;
+                    let cp2y = p2.y;
+                    pathD += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+                }
+            }
+            svg.innerHTML = `<path d="${pathD}" stroke="#b78e63" stroke-width="8" fill="none" stroke-linecap="round" stroke-dasharray="15,10" />`;
+        }
+
+        function openMap() {
+            renderMap();
+            document.getElementById('modal-map').style.display = 'flex';
+            setTimeout(() => {
+                const scroll = document.getElementById('map-scroll-view');
+                const targetX = (state.pos * 120) - (scroll.clientWidth / 2);
+                scroll.scrollTo({left: targetX, behavior: 'smooth'});
+            }, 100);
+        }
+
+        function addToBag(item) {
+            state.bag.push(item);
+            renderBag();
+        }
+        function renderBag() {
+            const el = document.getElementById('bag-container');
+            const btn = document.getElementById('btn-claim');
+            if(state.bag.length === 0) {
+                el.innerHTML = '<span style="font-size:14px;color:#b2bec3;width:100%;text-align:center">暂无道具</span>';
+                btn.disabled = true;
+                return;
+            }
+            let html = '';
+            state.bag.forEach(i => html += `<div class="bag-item">${i}</div>`);
+            el.innerHTML = html;
+            el.scrollLeft = el.scrollWidth;
+            btn.disabled = false;
+            btn.innerText = `领取(${state.bag.length})`;
+        }
+        function claimAll() {
+            alert(`领取了: ${state.bag.join(' ')}`);
+            state.bag = [];
+            renderBag();
+            btn.innerText = "一键领取";
+        }
+
+        function rollDice() {
+            let val = Math.floor(Math.random()*6)+1;
+            document.getElementById('dice-val').innerText = val;
+            move(val);
+        }
+        function useMagic(v) {
+            if(state.magic<=0) return;
+            state.magic--;
+            document.getElementById('dice-val').innerText = v;
+            closeModal('magic');
+            move(v);
+        }
+        function openModal(id) {
+            if(id==='rank') renderRank();
+            document.getElementById('modal-'+id).style.display = 'flex';
+        }
+        function closeModal(id) { document.getElementById('modal-'+id).style.display = 'none'; }
+        
+        function renderRank() {
+            document.getElementById('rank-table').innerHTML = `
+                <tr><td>1</td><td>马里奥</td><td>999步</td></tr>
+                <tr><td>2</td><td>路易基</td><td>888步</td></tr>
+                <tr style="color:#6c5ce7;font-weight:bold"><td>3</td><td>我</td><td>${state.pos}步</td></tr>`;
+        }
+
+        init();
+    </script>
+</body>
+</html>
