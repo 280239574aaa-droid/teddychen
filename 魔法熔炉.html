@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>神秘魔法炉</title>
+    <style>
+        :root {
+            --bg-color: #130f26;
+            --panel-bg: #231c42;
+            --primary: #9b59b6;
+            --accent: #f1c40f;
+            --text-main: #ecf0f1;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background: radial-gradient(circle at center, #2c1b4d 0%, var(--bg-color) 100%);
+            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow: hidden; user-select: none;
+        }
+
+        /* --- 顶部信息栏 --- */
+        .top-bar {
+            width: 100%; max-width: 800px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 20px; box-sizing: border-box;
+            background: rgba(0,0,0,0.3); border-bottom: 2px solid #3d2a6b;
+        }
+        .tips-btn {
+            background: transparent; border: 1px solid var(--accent); color: var(--accent);
+            padding: 5px 15px; border-radius: 20px; cursor: pointer; font-weight: bold;
+        }
+        .tips-btn:hover { background: rgba(241, 196, 15, 0.1); }
+        .mana-box { font-size: 16px; font-weight: bold; display: flex; align-items: center; gap: 8px;}
+        .mana-val { color: #00cec9; font-size: 1.4em; }
+
+        /* --- 主舞台 --- */
+        .main-stage {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            width: 100%; max-width: 800px; position: relative;
+        }
+
+        /* 初始状态：魔法炉 */
+        .furnace-view {
+            display: flex; flex-direction: column; align-items: center;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+        .furnace-view.hidden { opacity: 0; pointer-events: none; transform: scale(0.8); position: absolute; }
+        
+        .furnace-icon {
+            font-size: 120px; filter: drop-shadow(0 0 30px #e74c3c);
+            animation: float 3s infinite ease-in-out;
+        }
+        @keyframes float { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-15px);} }
+
+        .btn-start {
+            margin-top: 30px; padding: 15px 40px; font-size: 20px; font-weight: bold;
+            background: linear-gradient(135deg, #e74c3c, #c0392b); color: white;
+            border: none; border-radius: 30px; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4); transition: transform 0.1s;
+        }
+        .btn-start:active { transform: scale(0.95); }
+
+        /* 游戏状态：5个道具 */
+        .game-view {
+            display: flex; flex-direction: column; align-items: center;
+            opacity: 0; pointer-events: none; position: absolute;
+            transition: opacity 0.5s; width: 100%; box-sizing: border-box; padding: 0 20px;
+        }
+        .game-view.active { opacity: 1; pointer-events: auto; position: relative; }
+
+        .items-container {
+            display: flex; gap: 15px; margin-bottom: 30px; justify-content: center;
+            flex-wrap: wrap; width: 100%;
+        }
+
+        .item-slot {
+            display: flex; flex-direction: column; align-items: center; gap: 15px;
+            background: var(--panel-bg); padding: 20px 15px; border-radius: 15px;
+            border: 2px solid #4a3b7a; box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            flex: 1; min-width: 90px; max-width: 120px;
+        }
+
+        .item-icon {
+            font-size: 45px; width: 70px; height: 70px;
+            display: flex; align-items: center; justify-content: center;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%; transition: transform 0.3s;
+        }
+        .item-icon.animating { transform: scale(0) rotate(180deg); }
+
+        .item-name { font-size: 13px; color: #bdc3c7; font-weight: bold; }
+
+        .btn-inject {
+            background: var(--primary); color: white; border: none; padding: 8px 12px;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px;
+            box-shadow: 0 4px 0 #732d91; transition: all 0.1s; width: 100%; white-space: nowrap;
+        }
+        .btn-inject:active { transform: translateY(4px); box-shadow: 0 0 0; }
+        .btn-inject:disabled { background: #7f8c8d; box-shadow: 0 4px 0 #34495e; cursor: not-allowed; }
+
+
+        /* --- 高信息密度：领奖结算面板 --- */
+        .claim-panel {
+            width: 100%; max-width: 700px;
+            background: rgba(20, 15, 38, 0.85);
+            border: 2px solid #5a4b8a;
+            border-radius: 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 25px; box-sizing: border-box;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+        }
+
+        .claim-info {
+            display: flex; flex-direction: column; gap: 8px; text-align: left;
+        }
+
+        .claim-status {
+            font-size: 15px; color: #bdc3c7; display: flex; align-items: center;
+        }
+        .claim-status .highlight {
+            font-weight: 900; font-size: 18px; margin: 0 4px;
+        }
+        .claim-status .divider {
+            margin: 0 12px; color: #4a3b7a; font-size: 18px;
+        }
+        
+        .claim-rewards {
+            background: rgba(0,0,0,0.4); border-radius: 6px;
+            padding: 6px 12px; font-size: 14px; font-weight: bold;
+            color: #55efc4; display: inline-block; border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .btn-claim {
+            padding: 15px 40px; font-size: 22px; font-weight: 900;
+            background: linear-gradient(135deg, #f1c40f, #f39c12); color: #2c3e50;
+            border: none; border-radius: 12px; cursor: pointer;
+            box-shadow: 0 5px 15px rgba(241, 196, 15, 0.3); transition: transform 0.1s;
+            white-space: nowrap; flex-shrink: 0; margin-left: 20px;
+        }
+        .btn-claim:active { transform: scale(0.95); }
+
+
+        /* --- 弹窗样式 --- */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            background: var(--panel-bg); width: 90%; max-width: 400px;
+            border-radius: 15px; border: 2px solid #5a4b8a;
+            padding: 25px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+        .modal-title { font-size: 20px; color: var(--accent); margin-bottom: 15px; border-bottom: 1px solid #5a4b8a; padding-bottom: 10px; }
+        
+        .seq-box { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px; margin: 20px 0; font-size: 20px; }
+        .seq-arrow { color: #7f8c8d; font-size: 14px; }
+
+        .rules-list { text-align: left; font-size: 13px; color: #bdc3c7; line-height: 1.8; margin-bottom: 20px; }
+        .rules-list span { color: var(--accent); font-weight: bold; }
+
+        .btn-close, .btn-confirm {
+            padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin: 0 5px;
+        }
+        .btn-close { background: #7f8c8d; color: white; }
+        .btn-confirm { background: #e74c3c; color: white; }
+
+        /* 调试按钮 */
+        .debug-panel { position: fixed; bottom: 10px; left: 10px; z-index: 50; }
+        .btn-debug {
+            background: #2c3e50; color: #ecf0f1; border: 1px solid #7f8c8d;
+            padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-debug:active { background: #34495e; transform: scale(0.95); }
+
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <button class="tips-btn" onclick="openModal('tips')">💡 玩法规则</button>
+        <div class="mana-box">
+            🔮 累计魔力: <span class="mana-val" id="mana-count">4</span>
+        </div>
+    </div>
+
+    <div class="main-stage">
+        <!-- 初始状态：魔法炉 -->
+        <div class="furnace-view" id="view-furnace">
+            <div class="furnace-icon">🏺</div>
+            <button class="btn-start" onclick="startGame()">开始唤醒</button>
+            <div style="margin-top: 15px; font-size: 14px; color: #bdc3c7;">每日仅限领取1次奖励</div>
+        </div>
+
+        <!-- 游戏状态：5个道具 + 结算面板 -->
+        <div class="game-view" id="view-game">
+            
+            <!-- 5个道具容器 -->
+            <div class="items-container" id="items-container">
+                <!-- JS 动态生成 -->
+            </div>
+
+            <!-- 高信息密度领奖区域 -->
+            <div class="claim-panel">
+                <div class="claim-info">
+                    <div class="claim-status">
+                        当前最高重复: <span id="dup-count" class="highlight" style="color: #00cec9;">0</span> 个
+                        <span class="divider">|</span>
+                        <span id="prize-tier" class="highlight">五等奖</span>
+                    </div>
+                    <!-- 直接罗列对应级别的奖励 -->
+                    <div class="claim-rewards" id="reward-list">
+                        <!-- JS 动态注入 -->
+                    </div>
+                </div>
+                <!-- 精简的按钮 -->
+                <button class="btn-claim" onclick="attemptClaim()">领奖</button>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 调试功能 -->
+    <div class="debug-panel">
+        <button class="btn-debug" onclick="simulateNextDay()">🔧 模拟：进入第二天(重置状态并 +4 魔力)</button>
+    </div>
+
+    <!-- 弹窗：Tips -->
+    <div class="modal-overlay" id="modal-tips">
+        <div class="modal-box">
+            <div class="modal-title">💡 转换顺序与规则</div>
+            <div style="font-size: 14px; color: #ecf0f1;">每次注入魔力，道具将按以下顺序变化：</div>
+            <div class="seq-box">
+                🔮<span class="seq-arrow">→</span>🎩<span class="seq-arrow">→</span>🪄<span class="seq-arrow">→</span>📖<span class="seq-arrow">→</span>💎<span class="seq-arrow">→</span>🔮
+            </div>
+            <div class="rules-list">
+                <div style="margin-bottom: 8px; color: #00cec9; border-bottom: 1px dashed #4a3b7a; padding-bottom: 8px;">
+                    <span>🔋 魔力补给</span>：每日0点自动获得 4 点魔力，未使用的魔力值可永久累积。
+                </div>
+                <div><span>一等奖</span>：5个道具全部一样</div>
+                <div><span>二等奖</span>：任意4个道具一样</div>
+                <div><span>三等奖</span>：任意3个道具一样</div>
+                <div><span>四等奖</span>：任意2个道具一样</div>
+                <div><span>五等奖</span>：所有道具都不一样</div>
+            </div>
+            <button class="btn-close" onclick="closeModal('tips')">我知道了</button>
+        </div>
+    </div>
+
+    <!-- 弹窗：二次确认 -->
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal-box">
+            <div class="modal-title">⚠️ 领奖确认</div>
+            <p style="color: #ecf0f1; margin-bottom: 20px;">
+                您当前满足的是 <span id="confirm-prize-name" style="color:var(--accent); font-weight:bold; font-size:20px;">X等奖</span>。<br><br>
+                <span style="color:#e74c3c">每日只能领取一次奖励！</span>确定不再改变道具，直接领取吗？
+            </p>
+            <div>
+                <button class="btn-close" onclick="closeModal('confirm')">取消，继续弄</button>
+                <button class="btn-confirm" onclick="executeClaim()">确定领取</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：普通消息 -->
+    <div class="modal-overlay" id="modal-alert">
+        <div class="modal-box" style="white-space: pre-wrap;">
+            <div class="modal-title" id="alert-title">提示</div>
+            <p style="color: #ecf0f1; margin-bottom: 20px; line-height: 1.6;" id="alert-msg">内容</p>
+            <button class="btn-close" onclick="closeModal('alert')">确定</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 游戏核心数据 ---
+        const ITEM_DEFS =[
+            { icon: '🔮', name: '水晶球' },
+            { icon: '🎩', name: '魔法帽' },
+            { icon: '🪄', name: '法杖' },
+            { icon: '📖', name: '魔法书' },
+            { icon: '💎', name: '魔法石' }
+        ];
+
+        // 奖励配置表，包含直接展示的具体奖励内容和UI颜色
+        const PRIZE_DATA = {
+            1: { name: "一等奖", color: "#ff4757", rewards: "👑 神话自选箱 x1 &nbsp; 💎 钻石 x1000" },
+            2: { name: "二等奖", color: "#ffa502", rewards: "🎁 传说随机箱 x1 &nbsp; 💎 钻石 x500" },
+            3: { name: "三等奖", color: "#9b59b6", rewards: "📜 史诗召唤卷 x1 &nbsp; 💰 金币 x50000" },
+            4: { name: "四等奖", color: "#3498db", rewards: "🧪 稀有魔力水 x5 &nbsp; 💰 金币 x10000" },
+            5: { name: "五等奖", color: "#95a5a6", rewards: "🥉 基础强化石 x10 &nbsp; 💰 金币 x1000" }
+        };
+
+        // --- 状态管理 ---
+        let state = {
+            mana: 4,               // 初始魔力设定为4 (满足每日获得4点的设定)
+            hasClaimedToday: false,
+            isPlaying: false,      
+            items:[],             
+            currentTier: 5         
+        };
+
+        // DOM 元素
+        const el = {
+            manaCount: document.getElementById('mana-count'),
+            viewFurnace: document.getElementById('view-furnace'),
+            viewGame: document.getElementById('view-game'),
+            container: document.getElementById('items-container'),
+            
+            dupCount: document.getElementById('dup-count'),
+            prizeTier: document.getElementById('prize-tier'),
+            rewardList: document.getElementById('reward-list')
+        };
+
+        // --- 初始化 ---
+        function initGame() {
+            el.manaCount.innerText = state.mana;
+            el.viewFurnace.classList.remove('hidden');
+            el.viewGame.classList.remove('active');
+            
+            state.isPlaying = false;
+            state.items =[];
+            el.container.innerHTML = ''; 
+        }
+
+        // --- 开始游戏 ---
+        function startGame() {
+            if (state.hasClaimedToday) {
+                showAlert("提示", "您今天已经领取过奖励了，请明天再来吧！\n\n(可点击左下角测试按钮模拟进入明天)");
+                return;
+            }
+
+            state.isPlaying = true;
+            state.items =[];
+            for(let i=0; i<5; i++) {
+                state.items.push(Math.floor(Math.random() * ITEM_DEFS.length));
+            }
+
+            el.viewFurnace.classList.add('hidden');
+            setTimeout(() => {
+                renderItems();
+                evaluatePrize();
+                el.viewGame.classList.add('active');
+            }, 500);
+        }
+
+        // --- 渲染道具 ---
+        function renderItems() {
+            el.container.innerHTML = '';
+            state.items.forEach((itemIdx, slotIndex) => {
+                const def = ITEM_DEFS[itemIdx];
+                const div = document.createElement('div');
+                div.className = 'item-slot';
+                div.innerHTML = `
+                    <div class="item-icon" id="icon-${slotIndex}">${def.icon}</div>
+                    <div class="item-name" id="name-${slotIndex}">${def.name}</div>
+                    <button class="btn-inject" onclick="injectMagic(${slotIndex})">✨ 注入魔力</button>
+                `;
+                el.container.appendChild(div);
+            });
+        }
+
+        // --- 注入魔力 ---
+        function injectMagic(slotIndex) {
+            if (state.mana <= 0) {
+                showAlert("魔力耗尽", "您的魔力值不足，无法继续注入！\n每日0点系统将自动补给 4 点魔力。");
+                return;
+            }
+
+            state.mana--;
+            el.manaCount.innerText = state.mana;
+
+            state.items[slotIndex] = (state.items[slotIndex] + 1) % ITEM_DEFS.length;
+            const newDef = ITEM_DEFS[state.items[slotIndex]];
+
+            const iconEl = document.getElementById(`icon-${slotIndex}`);
+            const nameEl = document.getElementById(`name-${slotIndex}`);
+            
+            iconEl.classList.add('animating');
+            setTimeout(() => {
+                iconEl.innerText = newDef.icon;
+                nameEl.innerText = newDef.name;
+                iconEl.classList.remove('animating');
+                
+                evaluatePrize(); // 每次变化后重新评估
+            }, 150); 
+        }
+
+        // --- 判定奖励等级并更新高密度面板 ---
+        function evaluatePrize() {
+            const counts = {};
+            state.items.forEach(idx => {
+                counts[idx] = (counts[idx] || 0) + 1;
+            });
+
+            // 找当前最高的重复数量
+            let maxCount = 0;
+            for (let idx in counts) {
+                if (counts[idx] > maxCount) maxCount = counts[idx];
+            }
+
+            // 根据频次定级
+            let tier = 5;
+            if (maxCount === 5) tier = 1;
+            else if (maxCount === 4) tier = 2;
+            else if (maxCount === 3) tier = 3;
+            else if (maxCount === 2) tier = 4;
+            else if (maxCount === 1) tier = 5;
+
+            state.currentTier = tier;
+            const prizeData = PRIZE_DATA[tier];
+            
+            // 更新 UI 领奖面板的信息
+            el.dupCount.innerText = maxCount;
+            el.prizeTier.innerText = prizeData.name;
+            el.prizeTier.style.color = prizeData.color;
+            el.rewardList.innerHTML = prizeData.rewards;
+        }
+
+        // --- 尝试领奖 ---
+        function attemptClaim() {
+            if (state.currentTier > 1) {
+                document.getElementById('confirm-prize-name').innerText = PRIZE_DATA[state.currentTier].name;
+                document.getElementById('confirm-prize-name').style.color = PRIZE_DATA[state.currentTier].color;
+                openModal('confirm');
+            } else {
+                executeClaim();
+            }
+        }
+
+        // --- 执行领奖 ---
+        function executeClaim() {
+            closeModal('confirm');
+            state.hasClaimedToday = true;
+            state.isPlaying = false;
+            
+            el.viewGame.classList.remove('active');
+            
+            setTimeout(() => {
+                const pData = PRIZE_DATA[state.currentTier];
+                showAlert("🎉 领奖成功！", `您获得了【${pData.name}】！\n获得物品：${pData.rewards.replace(/&nbsp;/g, ' ')}\n\n奖励已发往背包，请明日再来。`);
+                
+                el.viewFurnace.classList.remove('hidden');
+                el.container.innerHTML = '';
+            }, 500);
+        }
+
+        // --- 模拟：第二天0点重置 (包含魔力累积逻辑) ---
+        function simulateNextDay() {
+            let msg = "时间来到了第二天 00:00，系统已重置。";
+
+            // 1. 如果昨日未领奖，发放补偿邮件
+            if (state.isPlaying && !state.hasClaimedToday) {
+                const pData = PRIZE_DATA[state.currentTier];
+                msg += `\n\n【邮件补偿】：您昨日未领取的【${pData.name}】已发放到邮箱，包含：${pData.rewards.replace(/&nbsp;/g, ' ')}`;
+            }
+
+            // 2. 每日获得4点魔力，并累加到当前魔力中
+            state.mana += 4;
+            msg += `\n\n🔹 每日补给：自动获得 4 点魔力。\n当前累计魔力值：${state.mana}`;
+
+            // 3. 重置当日状态
+            state.hasClaimedToday = false;
+            state.isPlaying = false;
+            
+            initGame();
+            showAlert("⏳ 跨天重置", msg);
+        }
+
+        // --- 弹窗管理 ---
+        function openModal(id) { document.getElementById(`modal-${id}`).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(`modal-${id}`).style.display = 'none'; }
+        function showAlert(title, msg) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-msg').innerText = msg;
+            openModal('alert');
+        }
+
+        initGame();
+
+    </script>
+</body>
+</html>
