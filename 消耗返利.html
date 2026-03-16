@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消耗返利活动</title>
+<style>
+    /* 基础重置与SLG风格配色 */
+    :root {
+        --bg: #2c3e50; --card-bg: #e0f2fe; --card-border: #f1c40f; 
+        --btn-gold: linear-gradient(to bottom, #f9ca24, #f39c12);
+        --text-dark: #2d3436; --panel-bg: rgba(0, 0, 0, 0.75);
+    }
+    body {
+        margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif;
+        background: radial-gradient(circle at top, #34495e, var(--bg));
+        color: #fff; display: flex; flex-direction: column; align-items: center;
+        min-height: 100vh; overflow-x: hidden; user-select: none;
+    }
+
+    /* 顶部标题 */
+    .header { margin-top: 30px; text-align: center; }
+    .header h1 { margin: 0; font-size: 36px; color: #f1c40f; text-shadow: 0 2px 5px rgba(0,0,0,0.8); }
+    .header p { color: #bdc3c7; font-size: 14px; margin-top: 5px; }
+
+    /* 三大入口卡片区 */
+    .cards-container {
+        display: flex; gap: 20px; margin-top: 30px; justify-content: center;
+        width: 95%; max-width: 900px;
+    }
+
+    .card {
+        flex: 1; background: var(--card-bg); border: 4px solid #bdc3c7;
+        border-radius: 12px; padding: 20px 15px 60px 15px;
+        text-align: center; cursor: pointer; position: relative;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+    
+    /* 选中状态的高亮 (金边) */
+    .card.active {
+        border-color: var(--card-border); transform: scale(1.05); z-index: 2;
+        box-shadow: 0 0 20px rgba(241, 196, 15, 0.6);
+    }
+
+    .card-icon {
+        width: 80px; height: 80px; background: #0984e3; border-radius: 50%;
+        margin: 0 auto 15px; display: flex; align-items: center; justify-content: center;
+        font-size: 40px; color: white; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+    .card-title { color: var(--text-dark); font-size: 20px; font-weight: bold; margin-bottom: 5px;}
+    .card-desc { color: #636e72; font-size: 13px; font-weight: bold;}
+
+    /* 卡片底部的“前往”按钮 */
+    .btn-goto {
+        position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%);
+        background: var(--btn-gold); border: 2px solid #fff; color: #5c3a00;
+        padding: 10px 30px; font-size: 16px; font-weight: 900; border-radius: 8px;
+        cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.4); transition: 0.1s;
+        width: 60%;
+    }
+    .btn-goto:active { transform: translate(-50%, 4px); box-shadow: 0 0 0; }
+
+    /* 下方详细信息与领奖面板 */
+    .details-panel {
+        margin-top: 60px; width: 90%; max-width: 700px;
+        background: var(--panel-bg); border: 2px solid #f1c40f; border-radius: 15px;
+        padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    
+    .info-group { display: flex; flex-direction: column; gap: 12px; }
+    .info-row { font-size: 16px; color: #ecf0f1; }
+    .highlight-val { color: #00cec9; font-size: 22px; font-weight: bold; margin: 0 5px; font-family: monospace;}
+    .reward-val { color: #f1c40f; font-size: 22px; font-weight: bold; margin: 0 5px; font-family: monospace;}
+
+    .btn-claim {
+        background: linear-gradient(to bottom, #2ecc71, #27ae60); color: white;
+        border: 2px solid #fff; padding: 15px 40px; font-size: 20px; font-weight: bold;
+        border-radius: 10px; cursor: pointer; box-shadow: 0 5px 15px rgba(46,204,113,0.5);
+        transition: 0.1s;
+    }
+    .btn-claim:active { transform: translateY(4px); box-shadow: none; }
+    .btn-claim:disabled { background: #7f8c8d; box-shadow: none; border-color: #95a5a6; cursor: not-allowed; color: #bdc3c7;}
+
+    /* 调试与模拟区域 */
+    .debug-area {
+        margin-top: 40px; border-top: 1px dashed #7f8c8d; padding-top: 20px;
+        display: flex; gap: 15px; flex-wrap: wrap; justify-content: center;
+    }
+    .btn-debug {
+        background: #34495e; color: #fff; border: 1px solid #95a5a6; padding: 8px 15px;
+        border-radius: 5px; cursor: pointer; font-size: 13px; transition: 0.1s;
+    }
+    .btn-debug:active { background: #2c3e50; transform: scale(0.95); }
+    .btn-end { background: #c0392b; border-color: #e74c3c; }
+
+    /* 弹窗样式 */
+    .modal {
+        display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); z-index: 100; justify-content: center; align-items: center;
+    }
+    .modal-box {
+        background: #e0f2fe; color: #2d3436; padding: 30px; border-radius: 15px;
+        width: 80%; max-width: 400px; text-align: center; border: 4px solid #f1c40f;
+    }
+    .modal-title { font-size: 24px; font-weight: bold; color: #d35400; margin-bottom: 15px; }
+    .btn-close { background: #e67e22; color: white; border: none; padding: 10px 30px; font-size: 16px; border-radius: 5px; margin-top: 20px; cursor: pointer;}
+</style>
+</head>
+<body>
+
+<div class="header">
+    <h1>加速消耗返利</h1>
+    <p>活动期间消耗指定加速，即可获得丰厚道具返还！</p>
+</div>
+
+<!-- 1. 三大入口 (通过onclick切换选中态) -->
+<div class="cards-container">
+    <div class="card active" id="card-build" onclick="selectTab('build')">
+        <div class="card-icon">🔨</div>
+        <div class="card-title">建造加速</div>
+        <div class="card-desc">消耗建造加速获得丰厚奖励</div>
+        <!-- 2. 前往按钮 -->
+        <button class="btn-goto" onclick="goToTask('build', event)">前往</button>
+    </div>
+    
+    <div class="card" id="card-research" onclick="selectTab('research')">
+        <div class="card-icon">🔬</div>
+        <div class="card-title">科研加速</div>
+        <div class="card-desc">消耗科研加速获得丰厚奖励</div>
+        <button class="btn-goto" onclick="goToTask('research', event)">前往</button>
+    </div>
+
+    <div class="card" id="card-train" onclick="selectTab('train')">
+        <div class="card-icon">⚔️</div>
+        <div class="card-title">训练加速</div>
+        <div class="card-desc">消耗训练加速获得丰厚奖励</div>
+        <button class="btn-goto" onclick="goToTask('train', event)">前往</button>
+    </div>
+</div>
+
+<!-- 3. 下方详细信息展示与领取 -->
+<div class="details-panel">
+    <div class="info-group">
+        <!-- a. 已消耗信息 -->
+        <div class="info-row">
+            <span id="dt-name">【建造加速】</span>当前已消耗: <span class="highlight-val" id="val-consumed">0</span> 分钟
+        </div>
+        <!-- b. 累积返利信息 -->
+        <div class="info-row" style="color: #bdc3c7; font-size: 14px;">
+            当前可领取返利: <span class="reward-val" id="val-unclaimed">0</span> <span id="dt-reward-icon">💎</span>
+            <span style="font-size:12px; margin-left:10px;">(每消耗60分钟=10奖励)</span>
+        </div>
+    </div>
+    <!-- 4. 领取按钮 -->
+    <button class="btn-claim" id="btn-claim" onclick="claimReward()" disabled>领取</button>
+</div>
+
+<!-- 模拟玩家行为的调试区域 -->
+<div class="debug-area">
+    <div style="width: 100%; text-align: center; color: #95a5a6; font-size: 12px; margin-bottom: 5px;">【开发模拟测试面板】</div>
+    <button class="btn-debug" onclick="simulateConsume(60)">+ 消耗 60分钟 (当前选中项)</button>
+    <button class="btn-debug" onclick="simulateConsume(300)">+ 消耗 300分钟 (当前选中项)</button>
+    <!-- 5. 结算与邮件发送 -->
+    <button class="btn-debug btn-end" onclick="endEvent()">⏳ 结束活动 (结算发放邮件)</button>
+</div>
+
+<!-- 通用弹窗 -->
+<div class="modal" id="modal">
+    <div class="modal-box">
+        <div class="modal-title" id="modal-title">提示</div>
+        <div id="modal-msg" style="line-height: 1.6; font-weight: bold; color: #2d3436;"></div>
+        <button class="btn-close" onclick="closeModal()">确定</button>
+    </div>
+</div>
+
+<script>
+// --- 核心数据状态 ---
+const RATE = 60; // 每消耗60分钟
+const REWARD_AMOUNT = 10; // 获得10个奖励
+
+let state = {
+    activeTab: 'build',
+    // 保存三种加速的状态
+    data: {
+        build: { name: '建造加速', icon: '🔨', rewardIcon: '💎', consumed: 0, claimed: 0 },
+        research: { name: '科研加速', icon: '🔬', rewardIcon: '📜', consumed: 0, claimed: 0 },
+        train: { name: '训练加速', icon: '⚔️', rewardIcon: '🛡️', consumed: 0, claimed: 0 }
+    }
+};
+
+// 获取未领取的奖励数量
+function getUnclaimed(type) {
+    let item = state.data[type];
+    let totalEarned = Math.floor(item.consumed / RATE) * REWARD_AMOUNT;
+    return totalEarned - item.claimed;
+}
+
+// --- 交互逻辑 ---
+
+// 1. 切换页签
+function selectTab(type) {
+    state.activeTab = type;
+    
+    // 更新卡片UI状态
+    document.getElementById('card-build').classList.remove('active');
+    document.getElementById('card-research').classList.remove('active');
+    document.getElementById('card-train').classList.remove('active');
+    document.getElementById('card-' + type).classList.add('active');
+
+    updateDetailsPanel();
+}
+
+// 2. 前往详细任务
+function goToTask(type, event) {
+    event.stopPropagation(); // 阻止事件冒泡，防止触发卡片的 selectTab
+    let itemName = state.data[type].name;
+    showModal("跳转提示", `正在为您跳转至【${itemName}】的相关界面...\n您可以去消耗道具了！`);
+}
+
+// 3. 更新下方详细信息面板
+function updateDetailsPanel() {
+    let type = state.activeTab;
+    let item = state.data[type];
+    let unclaimed = getUnclaimed(type);
+
+    document.getElementById('dt-name').innerText = `【${item.name}】`;
+    document.getElementById('val-consumed').innerText = item.consumed;
+    document.getElementById('val-unclaimed').innerText = unclaimed;
+    document.getElementById('dt-reward-icon').innerText = item.rewardIcon;
+
+    // 4. 更新领取按钮状态
+    let btn = document.getElementById('btn-claim');
+    if (unclaimed > 0) {
+        btn.disabled = false;
+        btn.innerText = "领取奖励";
+    } else {
+        btn.disabled = true;
+        btn.innerText = "暂无可领";
+    }
+}
+
+// 4. 点击领取按钮
+function claimReward() {
+    let type = state.activeTab;
+    let unclaimed = getUnclaimed(type);
+    
+    if (unclaimed > 0) {
+        state.data[type].claimed += unclaimed;
+        showModal("领取成功", `成功领取了 ${unclaimed} 个 ${state.data[type].rewardIcon}！`);
+        updateDetailsPanel(); // 刷新数据
+    }
+}
+
+// --- 模拟测试逻辑 ---
+
+// 模拟消耗时间
+function simulateConsume(minutes) {
+    let type = state.activeTab;
+    state.data[type].consumed += minutes;
+    updateDetailsPanel();
+}
+
+// 5. 活动结束，结算未领取的奖励发邮件
+function endEvent() {
+    let mailContent =[];
+    
+    // 遍历检查是否有未领取的奖励
+    for (let key in state.data) {
+        let unclaimed = getUnclaimed(key);
+        if (unclaimed > 0) {
+            let item = state.data[key];
+            mailContent.push(`${item.name}返利: ${unclaimed} ${item.rewardIcon}`);
+            // 标记为已领，清空未领池
+            item.claimed += unclaimed;
+        }
+    }
+
+    if (mailContent.length > 0) {
+        showModal("活动结束 - 邮件补发", `活动已结束！\n由于您有未领取的累积奖励，系统已通过邮件为您补发：\n\n` + mailContent.join("\n"));
+    } else {
+        showModal("活动结束", "活动已结束！\n您已领取了所有奖励，没有任何遗漏！");
+    }
+    
+    updateDetailsPanel(); // 刷新最后的状态
+}
+
+// --- 弹窗组件 ---
+function showModal(title, msg) {
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('modal-msg').innerText = msg;
+    document.getElementById('modal').style.display = 'flex';
+}
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+}
+
+// 初始化
+updateDetailsPanel();
+
+</script>
+</body>
+</html>
