@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>绿茵交换 - 球衣收集大作战</title>
+    <style>
+        :root {
+            --pitch-dark: #27ae60;
+            --pitch-light: #2ecc71;
+            --panel-bg: rgba(0, 0, 0, 0.75);
+            --text-main: #ecf0f1;
+            --accent: #f1c40f;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: repeating-linear-gradient(
+                0deg,
+                var(--pitch-dark),
+                var(--pitch-dark) 40px,
+                var(--pitch-light) 40px,
+                var(--pitch-light) 80px
+            );
+            color: var(--text-main);
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; overflow-x: hidden; user-select: none;
+        }
+
+        /* 顶部信息栏 */
+        .top-bar {
+            width: 100%; max-width: 800px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 20px; box-sizing: border-box;
+            background: var(--panel-bg);
+            border-bottom: 2px solid #fff;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        
+        .tips-wrapper { position: relative; display: flex; align-items: center; }
+        .tips-btn {
+            background: transparent; border: 1px solid var(--accent); color: var(--accent);
+            padding: 6px 15px; border-radius: 20px; cursor: pointer; font-weight: bold;
+            transition: 0.2s;
+        }
+        .tips-btn:hover { background: rgba(241, 196, 15, 0.2); }
+        
+        /* 弱引导手指动画 */
+        .finger-guide {
+            position: absolute; right: -35px; top: 50%;
+            transform: translateY(-50%); font-size: 24px;
+            display: none;
+            animation: point-left 0.8s infinite alternate ease-in-out;
+        }
+        @keyframes point-left {
+            0% { transform: translate(0, -50%); }
+            100% { transform: translate(-10px, -50%); }
+        }
+
+        .card-box { font-size: 16px; font-weight: bold; }
+        .card-val { color: var(--accent); font-size: 1.4em; margin-left: 5px;}
+
+        /* 主舞台 */
+        .main-stage {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            width: 100%; max-width: 800px; position: relative;
+        }
+
+        /* 游戏视图：球衣展示 */
+        .game-view {
+            display: flex; flex-direction: column; align-items: center;
+            width: 100%; transition: opacity 0.5s;
+        }
+
+        .jerseys-container {
+            display: flex; gap: 15px; margin-bottom: 30px; justify-content: center;
+            flex-wrap: wrap; width: 100%;
+        }
+
+        .jersey-slot {
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
+            background: var(--panel-bg); padding: 15px 10px; border-radius: 15px;
+            border: 2px solid rgba(255,255,255,0.3); width: 100px;
+            min-height: 180px;
+            justify-content: flex-start;
+        }
+
+        .jersey {
+            width: 70px; height: 80px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 30px; font-weight: 900;
+            border-radius: 10px 10px 5px 5px;
+            clip-path: polygon(20% 0%, 80% 0%, 100% 20%, 100% 100%, 0% 100%, 0% 20%);
+            box-shadow: inset 0 -10px 20px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease; position: relative;
+        }
+        .jersey.animating { transform: scale(0.5) rotateY(90deg); }
+        .jersey-num { position: absolute; top: 30%; }
+
+        /* 球衣颜色样式 */
+        .color-0 { background: #e74c3c; color: white; } /* 红色 7号 */
+        .color-1 { background: #f1c40f; color: #2c3e50; } /* 黄色 8号 */
+        .color-2 { background: #3498db; color: white; } /* 蓝色 9号 */
+        .color-3 { background: #ffffff; color: #2c3e50; border: 1px solid #bdc3c7;} /* 白色 10号 */
+        .color-4 { background: #2c3e50; color: white; } /* 黑色 11号 */
+
+        .jersey-name { font-size: 13px; font-weight: bold; color: #bdc3c7; margin-bottom: 5px; }
+
+        /* 交换按钮 */
+        .btn-exchange {
+            background: #34495e; color: white; border: none; padding: 6px 15px;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px;
+            box-shadow: 0 3px 0 #2c3e50; transition: all 0.1s; width: 100%;
+        }
+        .btn-exchange:active { transform: translateY(3px); box-shadow: 0 0 0; }
+        .btn-exchange:disabled { background: #7f8c8d; box-shadow: 0 3px 0 #636e72; cursor: not-allowed; }
+
+        /* 回退按钮 */
+        .btn-undo {
+            background: #e67e22; color: white; border: none; padding: 6px 15px;
+            border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px;
+            box-shadow: 0 3px 0 #d35400; transition: all 0.1s; width: 100%;
+        }
+        .btn-undo:active { transform: translateY(3px); box-shadow: 0 0 0; }
+        .btn-undo:disabled { background: #7f8c8d; box-shadow: 0 3px 0 #636e72; cursor: not-allowed; }
+
+
+        /* 结算面板 */
+        .claim-panel {
+            width: 90%; max-width: 600px; background: rgba(0, 0, 0, 0.85);
+            border: 2px solid var(--accent); border-radius: 15px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px 25px; box-sizing: border-box; margin-top: 10px;
+        }
+        .claim-info { display: flex; flex-direction: column; gap: 8px; }
+        .claim-status { font-size: 16px; color: #ecf0f1; }
+        .highlight { color: var(--accent); font-weight: bold; font-size: 18px; margin: 0 5px;}
+        .claim-reward { color: #2ecc71; font-size: 14px; font-weight: bold; }
+
+        .btn-claim {
+            padding: 12px 30px; font-size: 18px; font-weight: 900;
+            background: linear-gradient(135deg, #2ecc71, #27ae60); color: white;
+            border: none; border-radius: 10px; cursor: pointer;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4); transition: 0.1s;
+        }
+        .btn-claim:active { transform: scale(0.95); }
+
+        /* 领奖后的静态文本栏 */
+        .claimed-static-panel {
+            display: none; 
+            width: 90%; max-width: 600px; background: rgba(0, 0, 0, 0.6);
+            border: 2px dashed #7f8c8d; border-radius: 15px;
+            padding: 20px; box-sizing: border-box; margin-top: 10px;
+            text-align: center; color: #bdc3c7; font-size: 18px; font-weight: bold;
+        }
+
+        /* 弹窗通用 */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8); z-index: 100;
+            justify-content: center; align-items: center; backdrop-filter: blur(5px);
+        }
+        .modal-box {
+            background: #2c3e50; width: 90%; max-width: 400px;
+            border-radius: 15px; border: 2px solid #34495e;
+            padding: 25px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .modal-title { font-size: 22px; color: var(--accent); margin-bottom: 15px; border-bottom: 1px solid #34495e; padding-bottom: 10px; }
+        
+        /* Tips 内容 */
+        .seq-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 5px; margin: 15px 0; }
+        .seq-item { padding: 4px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; }
+        .arrow { color: #bdc3c7; font-size: 12px; }
+        .rules { text-align: left; font-size: 13px; color: #bdc3c7; line-height: 1.8; }
+        .rules span { color: var(--accent); font-weight: bold; }
+
+        .btn-close, .btn-confirm {
+            padding: 10px 20px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin: 0 5px;
+        }
+        .btn-close { background: #7f8c8d; color: white; }
+        .btn-confirm { background: #e74c3c; color: white; }
+
+        /* 调试按钮 */
+        .debug-panel { position: fixed; bottom: 10px; left: 10px; z-index: 50; }
+        .btn-debug {
+            background: #e74c3c; color: white; border: 1px solid #c0392b;
+            padding: 8px 15px; border-radius: 5px; font-size: 12px; font-weight: bold; cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <div class="tips-wrapper">
+            <button class="tips-btn" onclick="openRules()">📋 规则与图鉴</button>
+            <div class="finger-guide" id="finger-guide">👈</div>
+        </div>
+        <div class="card-box">🎫 交换卡: <span class="card-val" id="card-count">20</span></div>
+    </div>
+
+    <div class="main-stage">
+        <!-- 游戏主界面 -->
+        <div class="game-view" id="view-game">
+            <div class="jerseys-container" id="jerseys-container">
+                <!-- 球衣由 JS 动态生成 -->
+            </div>
+
+            <!-- 未领奖时的动态面板 -->
+            <div class="claim-panel" id="claim-panel">
+                <div class="claim-info">
+                    <div class="claim-status">
+                        最高重复球衣: <span id="dup-count" class="highlight">0</span>件
+                        <span style="color:#7f8c8d; margin:0 10px;">|</span>
+                        <span id="prize-tier" class="highlight">五等奖</span>
+                    </div>
+                    <div class="claim-reward" id="reward-desc">奖励内容...</div>
+                </div>
+                <button class="btn-claim" onclick="attemptClaim()">领奖</button>
+            </div>
+
+            <!-- 领奖后的静态文本栏 -->
+            <div class="claimed-static-panel" id="claimed-panel">
+                今日奖励已领取，请明日再来
+            </div>
+        </div>
+    </div>
+
+    <!-- 模拟功能区 -->
+    <div class="debug-panel">
+        <button class="btn-debug" onclick="simulateNextDay()">⏩ 模拟：进入第二天 (0点重置)</button>
+    </div>
+
+    <!-- 弹窗：玩法Tips -->
+    <div class="modal-overlay" id="modal-tips">
+        <div class="modal-box">
+            <div class="modal-title">📋 玩法与规则</div>
+            <div style="font-size: 13px; color: #ecf0f1;">每次消耗交换卡，球衣将按以下顺序固定变化：</div>
+            <div class="seq-row">
+                <div class="seq-item color-0">红7</div><span class="arrow">→</span>
+                <div class="seq-item color-1">黄8</div><span class="arrow">→</span>
+                <div class="seq-item color-2">蓝9</div><span class="arrow">→</span>
+                <div class="seq-item color-3">白10</div><span class="arrow">→</span>
+                <div class="seq-item color-4">黑11</div><span class="arrow">→</span>
+                <span class="arrow">循环</span>
+            </div>
+            <div class="rules">
+                <div><span>一等奖</span>：5个球衣全部一样</div>
+                <div><span>二等奖</span>：任意4个球衣一样</div>
+                <div><span>三等奖</span>：任意3个球衣一样</div>
+                <div><span>四等奖</span>：任意2个球衣一样</div>
+                <div><span>五等奖</span>：所有球衣都不一样</div>
+                <div style="margin-top:10px; border-top: 1px dashed #7f8c8d; padding-top:10px; color:#e74c3c;">
+                    ⚠️ 每日仅限领取1次奖励。<br>
+                    💡 变换不满意？您可以消耗0成本，无限次回退已做出的交换（回退后返还交换卡）。<br>
+                    ⏳ 每日0点重置，未领取的奖励将邮件补发。
+                </div>
+            </div>
+            <button class="btn-close" style="margin-top:15px; width:100%" onclick="closeModal('tips')">我知道了</button>
+        </div>
+    </div>
+
+    <!-- 弹窗：二次确认 -->
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal-box">
+            <div class="modal-title">⚠️ 领奖确认</div>
+            <p style="color: #ecf0f1; margin-bottom: 20px;">
+                您当前满足的是 <span id="confirm-prize-name" class="highlight" style="font-size:22px;">X等奖</span>。<br><br>
+                <span style="color:#e74c3c">每日只能领取一次奖励！</span><br>确定不再继续交换，直接领取吗？
+            </p>
+            <div>
+                <button class="btn-close" onclick="closeModal('confirm')">取消，继续换</button>
+                <button class="btn-confirm" onclick="executeClaim()">确定领取</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：普通消息/奖励发放 -->
+    <div class="modal-overlay" id="modal-alert">
+        <div class="modal-box" style="white-space: pre-wrap;">
+            <div class="modal-title" id="alert-title">提示</div>
+            <p style="color: #ecf0f1; margin-bottom: 20px; line-height: 1.6;" id="alert-msg">内容</p>
+            <button class="btn-close" style="width:100%" onclick="closeModal('alert')">确定</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 游戏数据 ---
+        // 顺序严格：红7 -> 黄8 -> 蓝9 -> 白10 -> 黑11
+        const JERSEY_TYPES =[
+            { name: '红色 7号', cssClass: 'color-0', num: 7 },
+            { name: '黄色 8号', cssClass: 'color-1', num: 8 },
+            { name: '蓝色 9号', cssClass: 'color-2', num: 9 },
+            { name: '白色 10号', cssClass: 'color-3', num: 10 },
+            { name: '黑色 11号', cssClass: 'color-4', num: 11 }
+        ];
+
+        const REWARDS = {
+            1: { name: "一等奖", desc: "🏆 豪华球星签名球衣套装" },
+            2: { name: "二等奖", desc: "👕 俱乐部正版球衣盲盒" },
+            3: { name: "三等奖", desc: "🎽 官方专业训练服" },
+            4: { name: "四等奖", desc: "🎁 足球周边精美盲盒" },
+            5: { name: "五等奖", desc: "🪙 参与奖：金币 x1000" }
+        };
+
+        // --- 状态管理 ---
+        let state = {
+            cards: 20,              
+            hasClaimedToday: false, 
+            jerseys:[],            // 5个槽位的索引数据 (0-4)
+            exchangeHistory: [0, 0, 0, 0, 0], // 每个槽位今日交换的次数（用于判定是否可回退）
+            currentTier: 5          
+        };
+
+        // DOM 绑定
+        const el = {
+            cardCount: document.getElementById('card-count'),
+            container: document.getElementById('jerseys-container'),
+            claimPanel: document.getElementById('claim-panel'),
+            claimedPanel: document.getElementById('claimed-panel'),
+            dupCount: document.getElementById('dup-count'),
+            prizeTier: document.getElementById('prize-tier'),
+            rewardDesc: document.getElementById('reward-desc'),
+            fingerGuide: document.getElementById('finger-guide')
+        };
+
+        // --- 页面加载逻辑 ---
+        window.onload = () => {
+            initGame();
+            if (!localStorage.getItem('jerseyGameFirstLoaded')) {
+                openModal('tips'); 
+                localStorage.setItem('jerseyGameFirstLoaded', 'true');
+                el.fingerGuide.style.display = 'block'; 
+            }
+        };
+
+        // --- 初始化游戏 (每日重置或刚进入时) ---
+        function initGame() {
+            state.hasClaimedToday = false;
+            state.exchangeHistory =[0, 0, 0, 0, 0]; // 清空回退历史
+            el.cardCount.innerText = state.cards;
+            
+            // 切换面板状态
+            el.claimPanel.style.display = 'flex';
+            el.claimedPanel.style.display = 'none';
+
+            // 直接随机生成5个球衣
+            state.jerseys =[];
+            for(let i=0; i<5; i++) {
+                state.jerseys.push(Math.floor(Math.random() * 5));
+            }
+            
+            renderJerseys();
+            evaluatePrize();
+            
+            // 保证刚进游戏时所有展示生效
+            document.getElementById('view-game').style.opacity = 1;
+            document.getElementById('view-game').style.pointerEvents = 'auto';
+        }
+
+        function openRules() {
+            el.fingerGuide.style.display = 'none';
+            openModal('tips');
+        }
+
+        // --- 渲染球衣与按钮 ---
+        function renderJerseys() {
+            el.container.innerHTML = '';
+            state.jerseys.forEach((jerseyIdx, slotIndex) => {
+                const def = JERSEY_TYPES[jerseyIdx];
+                const div = document.createElement('div');
+                div.className = 'jersey-slot';
+                
+                let html = `
+                    <div class="jersey ${def.cssClass}" id="jersey-${slotIndex}">
+                        <div class="jersey-num">${def.num}</div>
+                    </div>
+                    <div class="jersey-name" id="name-${slotIndex}">${def.name}</div>
+                `;
+                
+                // 如果今天还没有领奖，才显示“交换”和“回退”按钮
+                if (!state.hasClaimedToday) {
+                    html += `
+                        <button class="btn-exchange" id="btn-exchange-${slotIndex}" onclick="exchangeJersey(${slotIndex})" ${state.cards <= 0 ? 'disabled' : ''}>🔄 交换</button>
+                        <button class="btn-undo" id="btn-undo-${slotIndex}" onclick="undoJersey(${slotIndex})" ${state.exchangeHistory[slotIndex] > 0 ? '' : 'disabled'}>↩️ 回退</button>
+                    `;
+                }
+                
+                div.innerHTML = html;
+                el.container.appendChild(div);
+            });
+        }
+
+        // --- 刷新按钮可用状态 ---
+        function updateButtonsState() {
+            for(let i = 0; i < 5; i++) {
+                const btnEx = document.getElementById(`btn-exchange-${i}`);
+                const btnUn = document.getElementById(`btn-undo-${i}`);
+                if(btnEx) btnEx.disabled = (state.cards <= 0);
+                if(btnUn) btnUn.disabled = (state.exchangeHistory[i] <= 0); // 只有交换过该位置，才能回退
+            }
+        }
+
+        // --- 正向交换逻辑 ---
+        function exchangeJersey(slotIndex) {
+            if (state.hasClaimedToday) return;
+            if (state.cards <= 0) return;
+
+            // 扣卡，记录交换历史
+            state.cards--;
+            state.exchangeHistory[slotIndex]++;
+            el.cardCount.innerText = state.cards;
+
+            // 顺序向下变化: (当前索引 + 1) % 5
+            state.jerseys[slotIndex] = (state.jerseys[slotIndex] + 1) % 5;
+            
+            // 立刻更新按钮状态，防止连点导致异常
+            updateButtonsState();
+            
+            // 执行动画和数据刷新
+            animateSlotAndUpdate(slotIndex);
+        }
+
+        // --- 逆向回退逻辑 ---
+        function undoJersey(slotIndex) {
+            if (state.hasClaimedToday) return;
+            if (state.exchangeHistory[slotIndex] <= 0) return; // 没交换过不能回退
+
+            // 退卡，减少交换历史
+            state.cards++;
+            state.exchangeHistory[slotIndex]--;
+            el.cardCount.innerText = state.cards;
+
+            // 顺序向上变化 (逆向): (当前索引 - 1 + 5) % 5
+            state.jerseys[slotIndex] = (state.jerseys[slotIndex] - 1 + 5) % 5;
+            
+            // 立刻更新按钮状态
+            updateButtonsState();
+            
+            // 执行动画和数据刷新
+            animateSlotAndUpdate(slotIndex);
+        }
+
+        // --- 通用：播放翻牌动画并结算 ---
+        function animateSlotAndUpdate(slotIndex) {
+            const newDef = JERSEY_TYPES[state.jerseys[slotIndex]];
+            const jerseyEl = document.getElementById(`jersey-${slotIndex}`);
+            const nameEl = document.getElementById(`name-${slotIndex}`);
+            
+            jerseyEl.classList.add('animating');
+            
+            setTimeout(() => {
+                // 翻转至不可见时替换样式
+                jerseyEl.className = `jersey ${newDef.cssClass} animating`;
+                jerseyEl.innerHTML = `<div class="jersey-num">${newDef.num}</div>`;
+                nameEl.innerText = newDef.name;
+                
+                // 恢复显示
+                jerseyEl.classList.remove('animating');
+                
+                // 重新评估最高奖励等级
+                evaluatePrize();
+            }, 150); 
+        }
+
+        // --- 评估奖项 ---
+        function evaluatePrize() {
+            const counts = {};
+            state.jerseys.forEach(idx => {
+                counts[idx] = (counts[idx] || 0) + 1;
+            });
+
+            let maxCount = 0;
+            for (let idx in counts) {
+                if (counts[idx] > maxCount) maxCount = counts[idx];
+            }
+
+            let tier = 5;
+            if (maxCount === 5) tier = 1;
+            else if (maxCount === 4) tier = 2;
+            else if (maxCount === 3) tier = 3;
+            else if (maxCount === 2) tier = 4;
+            else if (maxCount === 1) tier = 5;
+
+            state.currentTier = tier;
+            
+            el.dupCount.innerText = maxCount;
+            el.prizeTier.innerText = REWARDS[tier].name;
+            el.rewardDesc.innerText = REWARDS[tier].desc;
+            
+            if(tier === 1) el.prizeTier.style.color = "#e74c3c";
+            else el.prizeTier.style.color = "var(--accent)";
+        }
+
+        // --- 尝试领奖 ---
+        function attemptClaim() {
+            if (state.currentTier > 1) {
+                document.getElementById('confirm-prize-name').innerText = REWARDS[state.currentTier].name;
+                openModal('confirm');
+            } else {
+                executeClaim();
+            }
+        }
+
+        // --- 执行领奖 ---
+        function executeClaim() {
+            closeModal('confirm');
+            state.hasClaimedToday = true;
+            
+            const reward = REWARDS[state.currentTier];
+            showAlert("🎉 领奖成功！", `恭喜您获得了【${reward.name}】\n获得物品：${reward.desc}\n\n今日奖励已领取完毕，请明日再来。`);
+            
+            // 领奖后，重新渲染一次（按钮将被移除），并切换底部面板
+            renderJerseys(); 
+            el.claimPanel.style.display = 'none';
+            el.claimedPanel.style.display = 'block';
+        }
+
+        // --- 模拟：第二天0点重置 ---
+        function simulateNextDay() {
+            let msg = "时间来到了第二天 00:00，游戏状态已重置。";
+
+            // 如果昨天没领奖，触发邮件补发
+            if (!state.hasClaimedToday) {
+                const reward = REWARDS[state.currentTier];
+                msg += `\n\n【离线补发邮件】：\n您昨日尚未领取的【${reward.name}】已发放，包含：${reward.desc}`;
+            }
+
+            // 每日发放10张交换卡
+            state.cards += 10;
+            msg += `\n\n每日补给：获得 10 张交换卡。\n当前余量：${state.cards} 张。`;
+
+            initGame();
+            showAlert("⏳ 跨天重置", msg);
+        }
+
+        // --- 弹窗管理 ---
+        function openModal(id) { document.getElementById(`modal-${id}`).style.display = 'flex'; }
+        function closeModal(id) { document.getElementById(`modal-${id}`).style.display = 'none'; }
+        function showAlert(title, msg) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-msg').innerText = msg;
+            openModal('alert');
+        }
+
+    </script>
+</body>
+</html>
