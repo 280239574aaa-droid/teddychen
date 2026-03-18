@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>3D 绿茵神射手 - 极限挑战版</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87CEEB; touch-action: none; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        
+        .top-bar { display: flex; justify-content: space-between; padding: 20px; color: white; font-size: 24px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        .score-box span { color: #f1c40f; font-size: 32px; }
+        .lives-box span { color: #e74c3c; letter-spacing: 5px; }
+
+        #message { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%); font-size: 40px; font-weight: bold; color: white; text-shadow: 0 4px 10px rgba(0,0,0,0.8); opacity: 0; transition: opacity 0.3s; text-align: center; }
+
+        #game-over { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); pointer-events: auto; justify-content: center; align-items: center; flex-direction: column; color: white; z-index: 20; backdrop-filter: blur(5px); }
+        #game-over h1 { font-size: 48px; color: #e74c3c; margin-bottom: 10px; }
+        #game-over p { font-size: 24px; margin-bottom: 30px; }
+        #game-over button { padding: 15px 40px; font-size: 22px; font-weight: bold; background: linear-gradient(135deg, #2ecc71, #27ae60); color: white; border: none; border-radius: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4); }
+        #game-over button:active { transform: scale(0.95); }
+
+        .instruction { position: absolute; bottom: 50px; width: 100%; text-align: center; color: rgba(255,255,255,0.9); font-size: 18px; font-weight: bold; pointer-events: none; text-shadow: 2px 2px 5px rgba(0,0,0,0.8); animation: pulse 2s infinite;}
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-layer">
+        <div class="top-bar">
+            <div class="score-box">分数: <span id="score-val">0</span></div>
+            <div class="lives-box">机会: <span id="lives-val">⚽⚽⚽</span></div>
+        </div>
+        <div id="message">好球！+10分</div>
+        <div class="instruction">👆 按住足球，向上方快速滑动射门 👆</div>
+    </div>
+
+    <div id="game-over">
+        <h1>比赛结束</h1>
+        <p>最终得分: <span id="final-score" style="color:#f1c40f; font-size:42px; font-weight:bold;">0</span></p>
+        <button onclick="resetGame()">再来一局</button>
+    </div>
+
+<script>
+    // ================= 游戏核心配置 =================
+    const CONFIG = {
+        goalWidth: 18,
+        goalHeight: 9,
+        ballRadius: 0.8,
+        gravity: 0.15,
+        launchAngle: 35,
+        maxLives: 3,
+        // 更新分数矩阵
+        scoreMatrix: [[10,  6, 10], 
+            [ 8,  5,  8],[ 1,  3,  1]  
+        ]
+    };
+
+    let state = {
+        score: 0,
+        lives: CONFIG.maxLives,
+        kickPhase: 1,         // 记录当前是第几次踢球
+        hitWall: false,       // 标记是否打中人墙
+        wallMoving: false,    // 标记人墙是否移动
+        wallSpeed: 0.05,      // 人墙移动速度
+        wallDirection: 1,     // 人墙移动方向
+        isShooting: false,
+        ballVelocity: new THREE.Vector3(0, 0, 0),
+        startX: 0, startY: 0, startTime: 0
+    };
+
+    // ================= Three.js 场景初始化 =================
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); 
+    scene.fog = new THREE.Fog(0x87CEEB, 30, 100);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 28);
+    camera.lookAt(0, 2, 0);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+    // ================= 光照 =================
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(10, 20, 10);
+    dirLight.castShadow = true;
+    scene.add(dirLight);
+
+    // ================= 构建绿茵场 =================
+    const grassGeo = new THREE.PlaneGeometry(100, 100);
+    const grassMat = new THREE.MeshLambertMaterial({ color: 0x27ae60 });
+    const grass = new THREE.Mesh(grassGeo, grassMat);
+    grass.rotation.x = -Math.PI / 2;
+    grass.receiveShadow = true;
+    scene.add(grass);
+
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 });
+    const lineGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-15, 0.01, 0), new THREE.Vector3(-15, 0.01, 15),
+        new THREE.Vector3(15, 0.01, 15), new THREE.Vector3(15, 0.01, 0)
+    ]);
+    const lines = new THREE.Line(lineGeo, lineMat);
+    scene.add(lines);
+
+    // ================= 构建球门与网格 =================
+    const goalGroup = new THREE.Group();
+    const postMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const postGeo = new THREE.CylinderGeometry(0.3, 0.3, CONFIG.goalHeight, 16);
+    
+    const leftPost = new THREE.Mesh(postGeo, postMat);
+    leftPost.position.set(-CONFIG.goalWidth/2, CONFIG.goalHeight/2, 0);
+    goalGroup.add(leftPost);
+    
+    const rightPost = new THREE.Mesh(postGeo, postMat);
+    rightPost.position.set(CONFIG.goalWidth/2, CONFIG.goalHeight/2, 0);
+    goalGroup.add(rightPost);
+
+    const crossbarGeo = new THREE.CylinderGeometry(0.3, 0.3, CONFIG.goalWidth, 16);
+    const crossbar = new THREE.Mesh(crossbarGeo, postMat);
+    crossbar.rotation.z = Math.PI / 2;
+    crossbar.position.set(0, CONFIG.goalHeight, 0);
+    goalGroup.add(crossbar);
+
+    function createGridAndText() {
+        const w = CONFIG.goalWidth;
+        const h = CONFIG.goalHeight;
+        const netMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.5, gapSize: 0.5 });
+        
+        for(let i=1; i<3; i++) {
+            let x = -w/2 + (w/3)*i;
+            let geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, h, 0)]);
+            let line = new THREE.Line(geo, netMat);
+            line.computeLineDistances();
+            goalGroup.add(line);
+        }
+        for(let i=1; i<3; i++) {
+            let y = (h/3)*i;
+            let geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-w/2, y, 0), new THREE.Vector3(w/2, y, 0)]);
+            let line = new THREE.Line(geo, netMat);
+            line.computeLineDistances();
+            goalGroup.add(line);
+        }
+
+        for(let row=0; row<3; row++) {
+            for(let col=0; col<3; col++) {
+                let score = CONFIG.scoreMatrix[row][col];
+                let sprite = makeTextSprite(score.toString());
+                let x = -w/2 + (w/3) * col + (w/6);
+                let y = h - ((h/3) * row + (h/6));
+                sprite.position.set(x, y, 0);
+                goalGroup.add(sprite);
+            }
+        }
+    }
+
+    function makeTextSprite(message) {
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+        canvas.width = 256; canvas.height = 256;
+        context.font = "Bold 100px Arial";
+        context.textAlign = "center";
+        context.textBaseline = "middle";
+        
+        // 分数视觉区分
+        let scoreVal = parseInt(message);
+        if(scoreVal >= 8) context.fillStyle = "rgba(255, 255, 255, 1)";
+        else if(scoreVal >= 5) context.fillStyle = "rgba(255, 255, 255, 0.85)";
+        else context.fillStyle = "rgba(200, 200, 200, 0.6)";
+        
+        context.fillText(message, 128, 128);
+        let texture = new THREE.CanvasTexture(canvas);
+        let spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        let sprite = new THREE.Sprite(spriteMaterial);
+        sprite.scale.set(4, 4, 1);
+        return sprite;
+    }
+
+    createGridAndText();
+    scene.add(goalGroup);
+
+    // ================= 构建 3人防守墙 =================
+    const wallGroup = new THREE.Group();
+    const defenderGeo = new THREE.CylinderGeometry(0.4, 0.4, 3.5, 16);
+    const defenderMat = new THREE.MeshLambertMaterial({ color: 0xe74c3c }); 
+    
+    for(let i=0; i<3; i++) {
+        let def = new THREE.Mesh(defenderGeo, defenderMat);
+        def.position.set(-1.2 + i * 1.2, 1.75, 0); 
+        def.castShadow = true;
+        wallGroup.add(def);
+    }
+    wallGroup.position.set(0, 0, 10); 
+    wallGroup.visible = false;        
+    scene.add(wallGroup);
+
+    // ================= 构建足球 =================
+    const ballGeo = new THREE.IcosahedronGeometry(CONFIG.ballRadius, 2);
+    const ballMat = new THREE.MeshLambertMaterial({ color: 0xff8c00 }); 
+    const ballWireMat = new THREE.MeshBasicMaterial({ color: 0x333333, wireframe: true }); 
+    
+    const ball = new THREE.Mesh(ballGeo, ballMat);
+    const ballWire = new THREE.Mesh(ballGeo, ballWireMat);
+    ball.add(ballWire);
+    ball.castShadow = true;
+    
+    const START_Z = 20; 
+    ball.position.set(0, CONFIG.ballRadius, START_Z);
+    scene.add(ball);
+
+    // ================= 交互逻辑 =================
+    let isDragging = false;
+
+    window.addEventListener('pointerdown', (e) => {
+        if(state.isShooting || state.lives <= 0) return;
+        isDragging = true;
+        state.startX = e.clientX;
+        state.startY = e.clientY;
+        state.startTime = Date.now();
+    });
+
+    window.addEventListener('pointerup', (e) => {
+        if(!isDragging || state.isShooting) return;
+        isDragging = false;
+
+        let endX = e.clientX;
+        let endY = e.clientY;
+        let timeDiff = Date.now() - state.startTime;
+        let deltaX = endX - state.startX;
+        let deltaY = endY - state.startY;
+
+        if(deltaY > 0 || Math.abs(deltaY) < 50 || timeDiff < 10) return;
+
+        let distance = Math.sqrt(deltaX*deltaX + deltaY*deltaY);
+        let speedRaw = distance / timeDiff; 
+        let power = Math.max(0.8, Math.min(speedRaw * 0.3 + 0.5, 1.5));
+
+        let screenWidth = window.innerWidth;
+        let xAngleRatio = deltaX / (screenWidth / 4); 
+        xAngleRatio = Math.max(-1, Math.min(xAngleRatio, 1)); 
+        let maxSideVelocity = 0.9; 
+
+        let theta = CONFIG.launchAngle * (Math.PI / 180);
+        let vZ = -power * Math.cos(theta) * 1.5; 
+        let vY = power * Math.sin(theta) * 2.0;
+        let vX = xAngleRatio * maxSideVelocity;
+
+        state.ballVelocity.set(vX, vY, vZ);
+        state.isShooting = true;
+        
+        document.querySelector('.instruction').style.opacity = '0';
+    });
+
+    // ================= 游戏物理循环 =================
+    function animate() {
+        requestAnimationFrame(animate);
+
+        // 人墙移动逻辑
+        if (state.wallMoving && wallGroup.visible) {
+            wallGroup.position.x += state.wallSpeed * state.wallDirection;
+            if (Math.abs(wallGroup.position.x) > 4) {
+                state.wallDirection *= -1;
+            }
+        }
+
+        if(state.isShooting) {
+            let prevZ = ball.position.z;
+            ball.position.add(state.ballVelocity);
+            let curZ = ball.position.z;
+
+            state.ballVelocity.y -= CONFIG.gravity;
+            ball.rotation.x += state.ballVelocity.z * 0.1;
+            ball.rotation.z -= state.ballVelocity.x * 0.1;
+
+            // 人墙碰撞检测
+            if (wallGroup.visible && prevZ > 10.4 && curZ <= 10.4) {
+                let wx = wallGroup.position.x;
+                if (Math.abs(ball.position.x - wx) < 2.0 && ball.position.y < 4.3) {
+                    state.hitWall = true;
+                    state.ballVelocity.z *= -0.4;
+                    state.ballVelocity.x *= 0.5;
+                    state.ballVelocity.y *= 0.5;
+                    ball.position.z = 10.5; 
+                    showMessage("被拦截！人墙立大功", "#e67e22");
+                }
+            }
+
+            // 越过球门线检测
+            if(ball.position.z <= 0 && !state.hitWall) {
+                checkGoal(ball.position.x, ball.position.y);
+            }
+            
+            // 落地检测
+            if(ball.position.y < CONFIG.ballRadius) {
+                ball.position.y = CONFIG.ballRadius;
+                state.ballVelocity.y *= -0.5; 
+                state.ballVelocity.z *= 0.8;  
+                state.ballVelocity.x *= 0.8;
+
+                if(Math.abs(state.ballVelocity.z) < 0.1 && ball.position.z > 0) {
+                    processMiss();
+                }
+            }
+        }
+
+        renderer.render(scene, camera);
+    }
+
+    // ================= 判定进球与文案反馈 =================
+    function checkGoal(x, y) {
+        state.isShooting = false; 
+        state.kickPhase++; 
+
+        let w = CONFIG.goalWidth;
+        let h = CONFIG.goalHeight;
+
+        if(x > -w/2 && x < w/2 && y > 0 && y < h) {
+            let col = Math.floor((x + w/2) / (w/3));
+            let rawRow = Math.floor(y / (h/3)); 
+            let row = 2 - rawRow; 
+
+            col = Math.max(0, Math.min(2, col));
+            row = Math.max(0, Math.min(2, row));
+
+            let getScore = CONFIG.scoreMatrix[row][col];
+            
+            state.score += getScore;
+            document.getElementById('score-val').innerText = state.score;
+
+            // 动态提示语
+            let msg = "";
+            let color = "#2ecc71"; // 默认绿色
+            
+            if (getScore === 10) {
+                msg = `世界波！+${getScore}分`;
+                color = "#f1c40f"; // 金色
+            } else if (getScore >= 5 && getScore <= 9) {
+                msg = `完美！+${getScore}分`;
+            } else {
+                msg = `好球！+${getScore}分`;
+            }
+            
+            showMessage(msg, color);
+            
+        } else {
+            processMiss(true); 
+            return;
+        }
+
+        setTimeout(() => { resetBall(); }, 1500);
+    }
+
+    function processMiss(isFromGoalCheck = false) {
+        state.isShooting = false;
+        state.lives -= 1;
+        
+        if (!isFromGoalCheck) {
+            state.kickPhase++; 
+        }
+        
+        updateLivesUI();
+        
+        if(!state.hitWall) {
+            showMessage("遗憾！偏出球门", "#e74c3c");
+        }
+
+        if(state.lives <= 0) setTimeout(showGameOver, 1000);
+        else setTimeout(resetBall, 1500);
+    }
+
+    function resetBall() {
+        if(state.lives <= 0) return;
+        ball.position.set(0, CONFIG.ballRadius, START_Z);
+        state.ballVelocity.set(0,0,0);
+        ball.rotation.set(0,0,0);
+        state.hitWall = false;
+
+        if (state.kickPhase >= 3) {
+            wallGroup.visible = true;
+        } else {
+            wallGroup.visible = false;
+        }
+
+        if (state.kickPhase >= 5) {
+            state.wallMoving = true;
+        } else {
+            state.wallMoving = false;
+            wallGroup.position.x = 0; 
+        }
+
+        document.querySelector('.instruction').style.opacity = '1';
+    }
+
+    function updateLivesUI() {
+        let str = "";
+        for(let i=0; i<state.lives; i++) str += "⚽";
+        for(let i=state.lives; i<CONFIG.maxLives; i++) str += "❌";
+        document.getElementById('lives-val').innerText = str;
+    }
+
+    function showMessage(text, color) {
+        const msgEl = document.getElementById('message');
+        msgEl.innerText = text;
+        msgEl.style.color = color;
+        msgEl.style.opacity = 1;
+        setTimeout(() => { msgEl.style.opacity = 0; }, 1500);
+    }
+
+    function showGameOver() {
+        document.getElementById('final-score').innerText = state.score;
+        document.getElementById('game-over').style.display = 'flex';
+    }
+
+    function resetGame() {
+        state.score = 0;
+        state.lives = CONFIG.maxLives;
+        state.kickPhase = 1;
+        
+        document.getElementById('score-val').innerText = '0';
+        updateLivesUI();
+        document.getElementById('game-over').style.display = 'none';
+        
+        resetBall();
+    }
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate();
+
+</script>
+</body>
+</html>
